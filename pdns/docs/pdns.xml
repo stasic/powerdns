@@ -16978,7 +16978,7 @@ create unique index namealgoindex on tsigkeys(name, algorithm);
             <varlistentry>
               <term>tinydns-tai-adjust</term>
               <listitem>
-                <para>This adjusts the TAI value if timestamps are used. These seconds will be added to the start point (1970) and will allow you to ajust for leap seconds. The default is 10.</para>
+                <para>This adjusts the TAI value if timestamps are used. These seconds will be added to the start point (1970) and will allow you to adjust for leap seconds. The default is 10.</para>
               </listitem>
             </varlistentry>
           </variablelist>
