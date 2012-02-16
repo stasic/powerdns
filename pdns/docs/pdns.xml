@@ -16989,6 +16989,7 @@ to use the data.cdb files that tinydns uses without any changes to the file.
         <para>
 The TinyDNS backend has support for location and timestamp support. The behaviour should not be different from tinydns. Because PowerDNS uses cache, it is needed to lower
 the cache ttl (TODO: link) to 0 for correct operation of the location. Timestamp support should not require a change in cache ttl values (TODO: test output?).
+        </para>
       </sect2>
     </sect1>
   </appendix>
