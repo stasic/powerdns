@@ -16962,9 +16962,10 @@ create unique index namealgoindex on tsigkeys(name, algorithm);
      	  </tgroup>
      	</table>
       <para>
-The TinyDNS backend allows you to use <ulink url="http://cr.yp.to/djbdns.html">djbdns's</ulink> data.cdb file format as the storage of your DNS records.
-The data.cdb file is created by the <ulink url="http://cr.yp.to/djbdns/tinydns-data.html">tinydns-data</ulink> tool. The backend is designed to be able 
-to use the data.cdb files that tinydns uses without any changes to the file.
+The TinyDNS backend allows you to use <ulink url="http://cr.yp.to/djbdns.html">djbdns's</ulink> data.cdb file format as
+the storage of your DNS records. The data.cdb file is created using 
+<ulink url="http://cr.yp.to/djbdns/tinydns-data.html">tinydns-data</ulink>. The backend is designed to be able to use 
+the data.cdb files that tinydns uses without any changes to the file.
       </para>
      <sect2 id="tinydnsbackend-parameters"><title>Configuration Parameters</title>
         <para>
@@ -16979,7 +16980,10 @@ to use the data.cdb files that tinydns uses without any changes to the file.
             <varlistentry>
               <term>tinydns-tai-adjust</term>
               <listitem>
-                <para>This adjusts the TAI value if timestamps are used. These seconds will be added to the start point (1970) and will allow you to adjust for leap seconds. The default is 10.</para>
+                <para>
+This adjusts the <ulink url="http://www.tai64.com/">TAI</ulink> value if timestamps are used.
+These seconds will be added to the start point (1970) and will allow you to adjust for leap seconds. The default is 10.
+                </para>
               </listitem>
             </varlistentry>
           </variablelist>
@@ -16988,9 +16992,23 @@ to use the data.cdb files that tinydns uses without any changes to the file.
       <sect2 id="tinydnsbackend-features"><title>Location and Timestamp support</title>
         <para>
 The TinyDNS backend has support for location and timestamp. The behaviour should not be different from tinydns. PowerDNS has packetcache and querycache. Therefor it is 
-needed to lower the <command>cache-ttl</command> to 0 for correct operation with location support. Timestamp support should not require a change in 
-<command>cache-ttl</command> values (TODO: test output?). Please note that <command>cache-ttl</command> is a performance related setting. 
+needed to lower the <command>cache-ttl</command> to 0 for correct operation with location support. Timestamp support also is impacted by <command>cache-ttl</command>,
+as the packetcache is not TTL aware, which means that it responds with the same TTL until it queries the backend again.
+Please note that <command>cache-ttl</command> is a performance related setting. 
 See <xref linkend="performance-settings" />. Location support only exists for IPv4.
+        </para>
+      </sect2>
+      <sect2 id="tinydnsbackend-implementation-notes"><title>Useful implementation notes</title>
+        <para>
+This backend might solve some issues you have with the current tinydns noted on 
+<ulink url="http://homepage.ntlworld.com/jonathan.deboynepollard/author.html">Jonathan de Boyne Pollard's</ulink> 
+<ulink url="http://homepage.ntlworld.com/jonathan.deboynepollard/FGA/djbdns-problems.html">djbdns known problems page</ulink>.
+        </para>
+        <para>
+The data.cdb file format support all types of records. They are sometimes difficult to create because you need to specify the
+actual content of the rdata. <ulink url="http://tinydns.org/">Tinydns.org</ulink> provides a number of links to tools/cgi-scripts
+that allow you to create records. <ulink url="http://anders.com/">Anders Brownworth</ulink> also privides a number of useful 
+record building scripts on his <ulink url="http://anders.com/projects/sysadmin/djbdnsRecordBuilder/">djbdnsRecordBuilder</ulink>.
         </para>
       </sect2>
     </sect1>
