@@ -16962,10 +16962,11 @@ create unique index namealgoindex on tsigkeys(name, algorithm);
      	  </tgroup>
      	</table>
       <para>
-        The TinyDNS backend allows you to use <ulink url="http://cr.yp.to/djbdns.html">djbdns's</ulink> data.cdb file format as the storage of your DNS records. The data.cdb file is created by the <ulink url="http://cr.yp.to/djbdns/tinydns-data.html">tinydns-data</ulink> tool. The backend is designed to be able to use the data.cdb files that tinydns uses without any changes to the file.
-	The TinyDNS backend might also solve some issues (CNAME-chain) listed on <ulink url="http://homepage.ntlworld.com/jonathan.deboynepollard/author.html">Jonathan de Boyne Pollard's</ulink> <ulink url="http://homepage.ntlworld.com/jonathan.deboynepollard/FGA/djbdns-problems.html">djbdns known problems page</ulink>.
+The TinyDNS backend allows you to use <ulink url="http://cr.yp.to/djbdns.html">djbdns's</ulink> data.cdb file format as the storage of your DNS records.
+The data.cdb file is created by the <ulink url="http://cr.yp.to/djbdns/tinydns-data.html">tinydns-data</ulink> tool. The backend is designed to be able 
+to use the data.cdb files that tinydns uses without any changes to the file.
       </para>
-      <sect2 id="tinydnsbackend-parameters"><title>Configuration Parameters</title>
+     <sect2 id="tinydnsbackend-parameters"><title>Configuration Parameters</title>
         <para>
           These are the configuration file parameters that are available for the TinyDNS backend. It is recommended to set the tinydns-dbfile.
           <variablelist>
@@ -16983,6 +16984,11 @@ create unique index namealgoindex on tsigkeys(name, algorithm);
             </varlistentry>
           </variablelist>
         </para>
+      </sect2>
+      <sect2 id="tinydnsbackend-features"><title>Location and Timestamp support</title>
+        <para>
+The TinyDNS backend has support for location and timestamp support. The behaviour should not be different from tinydns. Because PowerDNS uses cache, it is needed to lower
+the cache ttl (TODO: link) to 0 for correct operation of the location. Timestamp support should not require a change in cache ttl values (TODO: test output?).
       </sect2>
     </sect1>
   </appendix>
