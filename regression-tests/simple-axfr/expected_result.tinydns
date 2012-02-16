@@ -1,0 +1,21 @@
+test.com.	3600	IN	SOA	ns1.test.com. ahu.example.com. 2005092501 28800 7200 604800 86400
+test.com.	3600	IN	NS	ns1.test.com.
+test.com.	3600	IN	NS	ns2.test.com.
+test.com.	3600	IN	MX	10 smtp-servers.example.com.
+test.com.	3600	IN	MX	15 smtp-servers.test.com.
+www.test.com.	3600	IN	CNAME	server1.test.com.
+server1.test.com.	3600	IN	A	1.2.3.4
+*.test.test.com.	3600	IN	CNAME	server1.test.com.
+www.test.test.com.	3600	IN	A	4.3.2.1
+sub.test.test.com.	3600	IN	NS	ns-test.example.net.test.com.
+enum.test.com.	3600	IN	NAPTR	100 50 "u" "e2u+sip" "" testuser@domain.com.
+counter.test.com.	3600	IN	A	1.1.1.5
+server1.test.com.	3600	IN	RP	ahu.ds9a.nl. counter.test.com.
+_ldap._tcp.dc.test.com.	3600	IN	SRV	0 100 389 server1.test.com.
+_double._tcp.dc.test.com.	3600	IN	SRV	0 100 389 server1.test.com.
+_double._tcp.dc.test.com.	3600	IN	SRV	1 100 389 server1.test.com.
+blah.test.com.	3600	IN	NS	blah.test.com.
+blah.test.com.	3600	IN	A	9.9.9.9
+within-server.test.com.	3600	IN	CNAME	outpost.example.com.
+very-long-txt.test.com.	3600	IN	TXT	"A very long TXT record! boy you won't believe how long. A very long TXT record! boy you won't believe how long. A very long TXT" " record! boy you won't believe how long. A very long TXT record! boy you won't believe how long. A very long TXT record! boy yo" "u won't believe how long!"
+test.com.	3600	IN	SOA	ns1.test.com. ahu.example.com. 2005092501 28800 7200 604800 86400
