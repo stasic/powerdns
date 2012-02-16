@@ -16953,7 +16953,7 @@ create unique index namealgoindex on tsigkeys(name, algorithm);
      	  <tgroup cols="2">
           <tbody>
      	      <row><entry>Native</entry><entry>Yes</entry></row>
-            <row><entry>Master</entry><entry>Yes</entry></row>
+            <row><entry>Master</entry><entry>No</entry></row>
      	      <row><entry>Slave</entry><entry>No</entry></row>
      	      <row><entry>Superslave</entry><entry>No</entry></row>
      	      <row><entry>Autoserial</entry><entry>No</entry></row>
