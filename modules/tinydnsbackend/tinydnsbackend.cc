@@ -98,8 +98,8 @@ bool TinyDNSBackend::get(DNSResourceRecord &rr)
 		string val = record.second; 
 		string key = record.first;
 
-		cerr<<"GOT KEY: "<<makeHexDump(key)<<endl;
-		cerr<<"GOT VAL: "<<makeHexDump(val)<<endl;
+		DLOG(L<<Logger::Debug<<"[GET] Retrieved key: "<<makeHexDump(key)<<endl);
+		DLOG(L<<Logger::Debug<<"[GET] Retrieved val: "<<makeHexDump(val)<<endl);
 
 		if (!d_isAxfr) {
 			// If we have a wildcard query, but the record we got is not a wildcard, we skip.
@@ -122,8 +122,8 @@ bool TinyDNSBackend::get(DNSResourceRecord &rr)
 		copy(sval, sval+len, bytes.begin());
 		PacketReader pr(bytes);
 		valtype = QType(pr.get16BitInt());
-		L<<Logger::Debug<<"[GET] ValType:"<<valtype.getName()<<endl;
-		L<<Logger::Debug<<"[GET] QType:"<<d_qtype.getName()<<endl;
+		DLOG(L<<Logger::Debug<<"[GET] ValType:"<<valtype.getName()<<endl);
+		DLOG(L<<Logger::Debug<<"[GET] QType:"<<d_qtype.getName()<<endl);
 		char locwild = pr.get8BitInt();
 
 		if(locwild != '\075' && (locwild == '\076' || locwild == '\053')) 
@@ -150,17 +150,13 @@ bool TinyDNSBackend::get(DNSResourceRecord &rr)
 		}
 		if(d_qtype.getCode()==QType::ANY || valtype==d_qtype || d_isAxfr)
 		{
-			cerr<<"Key before DNSLabel: "<<makeHexDump(key)<<endl;
-			// if we do an AXFR and we have a wildcard record, we need to add '*.' before it.
+			// if we do an AXFR and we have a wildcard record, we need to add \001\052 before it.
 			if (d_isAxfr && (val[2] == '\052' || val[2] == '\053' )) {
-				cerr<<"DOING AXFR. ADDING *."<<endl;
 				key.insert(0, 1, '\052');
 				key.insert(0, 1, '\001');
-				cerr<<"ADDED Key before DNSLabel: "<<makeHexDump(key)<<endl;
 			}
 			DNSLabel dnsKey(key.c_str(), key.size());
 			rr.qname = dnsKey.human();
-			cerr<<"rr.qname: "<<makeHexDump(rr.qname)<<endl;
 			// strip of the . (dot) at the end, if we don't packethandler does not handle this correctly.
 			rr.qname = rr.qname.erase(rr.qname.size()-1, 1);
 			rr.qtype = valtype;
@@ -206,11 +202,11 @@ bool TinyDNSBackend::get(DNSResourceRecord &rr)
 			{
 				rr.content = content;
 			}
-			cerr<<"Returning content: "<<rr.content<<endl;
+			DLOG(L<<Logger::Debug<<"Returning content: "<<rr.content<<endl);
 			return true;
 		}
 	} // end of while
-	cerr<<"Returning false."<<endl;
+	DLOG(L<<Logger::Debug<<"No more records to return."<<endl);
 	return false;
 }
 
