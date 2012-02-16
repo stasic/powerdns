@@ -16982,7 +16982,8 @@ the data.cdb files that tinydns uses without any changes to the file.
               <listitem>
                 <para>
 This adjusts the <ulink url="http://www.tai64.com/">TAI</ulink> value if timestamps are used.
-These seconds will be added to the start point (1970) and will allow you to adjust for leap seconds. The default is 10.
+These seconds will be added to the start point (1970) and will allow you to adjust for leap seconds. The current default is 10, 
+<ulink url="http://hpiers.obspm.fr/iers/bul/bulc/bulletinc.dat">but as of june 30th 2012</ulink> should be 11.
                 </para>
               </listitem>
             </varlistentry>
