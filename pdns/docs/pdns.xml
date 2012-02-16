@@ -16991,9 +16991,12 @@ These seconds will be added to the start point (1970) and will allow you to adju
       </sect2>
       <sect2 id="tinydnsbackend-features"><title>Location and Timestamp support</title>
         <para>
-The TinyDNS backend has support for location and timestamp. The behaviour should not be different from tinydns. PowerDNS has packetcache and querycache. Therefor it is 
-needed to lower the <command>cache-ttl</command> to 0 for correct operation with location support. Timestamp support also is impacted by <command>cache-ttl</command>,
-as the packetcache is not TTL aware, which means that it responds with the same TTL until it queries the backend again.
+The TinyDNS backend has support for location and timestamp. The behaviour should not be different from tinydns.
+PowerDNS has packetcache and querycache. Therefor it is needed to lower the <command>cache-ttl</command> to 0 for 
+correct operation with location support. Timestamp support is impacted by <command>cache-ttl</command> and 
+<command>query-cache-ttl</command>, as the packetcache is not TTL aware, which means that it responds with the same
+TTL until it queries the backend again. The query-cache might detect the same query and not call the backend code 
+that re-calculates the TTL value for the given timestamp.
 Please note that <command>cache-ttl</command> is a performance related setting. 
 See <xref linkend="performance-settings" />. Location support only exists for IPv4.
         </para>
