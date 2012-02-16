@@ -92,7 +92,6 @@ void TinyDNSBackend::lookup(const QType &qtype, const string &qdomain, DNSPacket
 
 bool TinyDNSBackend::get(DNSResourceRecord &rr)
 {
-	L<<Logger::Debug<<"[GET] called"<<endl;
 	pair<string, string> record;
 
 	while (d_cdbReader->readNext(record)) {
@@ -102,7 +101,6 @@ bool TinyDNSBackend::get(DNSResourceRecord &rr)
 		cerr<<"GOT KEY: "<<makeHexDump(key)<<endl;
 		cerr<<"GOT VAL: "<<makeHexDump(val)<<endl;
 
-		//TODO: check if this is correct, what to do with wildcard records in an AXFR?
 		if (!d_isAxfr) {
 			// If we have a wildcard query, but the record we got is not a wildcard, we skip.
 			if (d_isWildcardQuery && val[2] != '\052' && val[2] != '\053') {
@@ -158,6 +156,7 @@ bool TinyDNSBackend::get(DNSResourceRecord &rr)
 			rr.qname = rr.qname.erase(rr.qname.size()-1, 1);
 			rr.qtype = valtype;
 			rr.ttl = pr.get32BitInt();
+			//TODO: we're not always out. See Rectify zone
 			rr.auth = true;
 
 			uint64_t timestamp = pr.get32BitInt();
@@ -184,16 +183,11 @@ bool TinyDNSBackend::get(DNSResourceRecord &rr)
 			dr.d_class = 1;
 			dr.d_type = valtype.getCode();
 			dr.d_clen = val.size()-pr.d_pos;
-			cerr<<"BEFORE mastermake"<<endl;	
 			DNSRecordContent *drc = DNSRecordContent::mastermake(dr, pr);
-			cerr<<"AFTER mastermake"<<endl;	
-			// We are always auth?
 
 			string content = drc->getZoneRepresentation();
 			if(rr.qtype.getCode() == QType::MX || rr.qtype.getCode() == QType::SRV)
 			{
-				cerr<<"Content:"<<content<<endl;
-				cerr<<"Content:"<<makeHexDump(content)<<endl;
 				vector<string>parts;
 				stringtok(parts,content," ");
 				rr.priority=atoi(parts[0].c_str());
