@@ -16963,6 +16963,7 @@ create unique index namealgoindex on tsigkeys(name, algorithm);
      	</table>
       <para>
         The TinyDNS backend allows you to use <ulink url="http://cr.yp.to/djbdns.html">djbdns's</ulink> data.cdb file format as the storage of your DNS records. The data.cdb file is created by the <ulink url="http://cr.yp.to/djbdns/tinydns-data.html">tinydns-data</ulink> tool. The backend is designed to be able to use the data.cdb files that tinydns uses without any changes to the file.
+	The TinyDNS backend might also solve some issues (CNAME-chain) listed on <ulink url="http://homepage.ntlworld.com/jonathan.deboynepollard/author.html">Jonathan de Boyne Pollard's</ulink> <ulink url="http://homepage.ntlworld.com/jonathan.deboynepollard/FGA/djbdns-problems.html">djbdns known problems page</ulink>.
       </para>
       <sect2 id="tinydnsbackend-parameters"><title>Configuration Parameters</title>
         <para>
