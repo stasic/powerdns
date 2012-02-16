@@ -16987,9 +16987,10 @@ to use the data.cdb files that tinydns uses without any changes to the file.
       </sect2>
       <sect2 id="tinydnsbackend-features"><title>Location and Timestamp support</title>
         <para>
-The TinyDNS backend has support for location and timestamp support. The behaviour should not be different from tinydns. Because PowerDNS uses cache, it is needed to lower
-the cache ttl (TODO: link) to 0 for correct operation of the location. Timestamp support should not require a change in cache ttl values (TODO: test output?).
-Location support only exists for IPv4 in this backend.
+The TinyDNS backend has support for location and timestamp. The behaviour should not be different from tinydns. PowerDNS has packetcache and querycache. Therefor it is 
+needed to lower the <command>cache-ttl</command> to 0 for correct operation with location support. Timestamp support should not require a change in 
+<command>cache-ttl</command> values (TODO: test output?). Please note that <command>cache-ttl</command> is a performance related setting. 
+See <xref linkend="performance-settings" />. Location support only exists for IPv4.
         </para>
       </sect2>
     </sect1>
