@@ -16940,6 +16940,47 @@ create unique index namealgoindex on tsigkeys(name, algorithm);
 	<filename>modules/luabackend/README</filename>, part of the PowerDNS Authoritative Server distribution.
       </para>
     </sect1>
+    <sect1 id="tinydnsbackend"><title>TinyDNS Backend</title>
+      <para>
+        <warning>
+	        <para>
+            The TinyDNS Backend is available since PowerDNS Authoritative Server 3.X (TODO). This backend is marked as EXPERIMENTAL!
+	        </para>
+	      </warning>
+      </para>
+    	<table>
+	      <title>TinyDNS backend capabilities</title>
+     	  <tgroup cols="2">
+          <tbody>
+     	      <row><entry>Native</entry><entry>Yes</entry></row>
+            <row><entry>Master</entry><entry>Yes</entry></row>
+     	      <row><entry>Slave</entry><entry>No</entry></row>
+     	      <row><entry>Superslave</entry><entry>No</entry></row>
+     	      <row><entry>Autoserial</entry><entry>No</entry></row>
+     	      <row><entry>DNSSEC</entry><entry>No</entry></row>
+          </tbody>
+     	  </tgroup>
+     	</table>
+      <sect2 id="tinydnsbackend-parameters"><title>Configuration Parameters</title>
+        <para>
+          These are the configuration file parameters that are available for the TinyDNS backend.
+          <variablelist>
+            <varlistentry>
+              <term>tinydns-dbfile</term>
+              <listitem>
+                <para>Specifies the name of the data file to use. The default is 'data.cdb'.</para>
+              </listitem>
+            </varlistentry>
+            <varlistentry>
+              <term>tinydns-tai-adjust</term>
+              <listitem>
+                <para>This adjusts the TAI value if timestamps are used. These seconds will be added to the start point (1970) and will allow you to ajust for leap seconds. The default is 10.</para>
+              </listitem>
+            </varlistentry>
+          </variablelist>
+        </para>
+      </sect2>
+    </sect1>
   </appendix>
 <appendix id="pdns-internals"><title>PDNS internals</title>
     <para>
