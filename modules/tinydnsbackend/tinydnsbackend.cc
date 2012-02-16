@@ -150,8 +150,17 @@ bool TinyDNSBackend::get(DNSResourceRecord &rr)
 		}
 		if(d_qtype.getCode()==QType::ANY || valtype==d_qtype || d_isAxfr)
 		{
+			cerr<<"Key before DNSLabel: "<<makeHexDump(key)<<endl;
+			// if we do an AXFR and we have a wildcard record, we need to add '*.' before it.
+			if (d_isAxfr && (val[2] == '\052' || val[2] == '\053' )) {
+				cerr<<"DOING AXFR. ADDING *."<<endl;
+				key.insert(0, 1, '\052');
+				key.insert(0, 1, '\001');
+				cerr<<"ADDED Key before DNSLabel: "<<makeHexDump(key)<<endl;
+			}
 			DNSLabel dnsKey(key.c_str(), key.size());
 			rr.qname = dnsKey.human();
+			cerr<<"rr.qname: "<<makeHexDump(rr.qname)<<endl;
 			// strip of the . (dot) at the end, if we don't packethandler does not handle this correctly.
 			rr.qname = rr.qname.erase(rr.qname.size()-1, 1);
 			rr.qtype = valtype;
