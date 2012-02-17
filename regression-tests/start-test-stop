@@ -92,9 +92,10 @@ __EOF__
 			;;			
 		tinydns)
 			../pdns/pdns_server --daemon=no --local-port=$port --socket-dir=./ \
-				--no-shuffle --launch=tinydns --tinydns-dbfile=./data.cdb \
+				--no-shuffle --launch=tinydns \
 				--query-logging --loglevel=9 --cache-ttl=0 --no-config \
 				--send-root-referral \
+				--tinydns-dbfile=../modules/tinydnsbackend/data.cdb \
 				--load-modules=../modules/tinydnsbackend/.libs/libtinydnsbackend.so &
 			;;
 		*)
