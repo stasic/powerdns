@@ -17196,6 +17196,7 @@ actual content of the rdata. <ulink url="http://tinydns.org/">Tinydns.org</ulink
 that allow you to create records. <ulink url="http://anders.com/">Anders Brownworth</ulink> also privides a number of useful 
 record building scripts on his <ulink url="http://anders.com/projects/sysadmin/djbdnsRecordBuilder/">djbdnsRecordBuilder</ulink>.
         </para>
+        <para>Compiling the TinyDNS backend requires you to have <ulink url="http://www.corpit.ru/mjt/tinycdb.html">tinycdb</ulink> version 0.77.</para>
       </sect2>
     </sect1>
   </appendix>
