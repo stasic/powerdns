@@ -114,7 +114,7 @@ int DNSLabel::validateConsume(const char* raw, unsigned int maxLen)
 		if(p > (const unsigned char*)raw + maxLen) // beyond the end
 			return -1;
 			
-		cerr<<(int)*p<<endl;
+		//cerr<<(int)*p<<endl;
 		if(*p >= 0xc0 && p + 1 < (const unsigned char*)raw + maxLen) {
 			unsigned int offset=(*p & ~0xc0) * 0xff + *(p+1);
 			++p;
