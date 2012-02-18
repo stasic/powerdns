@@ -25,11 +25,6 @@ CDB::CDB(const string &cdbfile)
 }
 
 CDB::~CDB() {
-
-	// Just to make sure.
-	if (d_key) {
-		free(d_key);
-	}
 	cdb_free(&d_cdb);
 	close(cdb_fileno(&d_cdb));
 }

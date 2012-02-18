@@ -38,7 +38,9 @@ vector<string> TinyDNSBackend::getLocations()
 		key[0]='\000';
 		key[1]='\045';
 		string searchkey(key, i+2);
-		ret = d_cdbReader->findall(searchkey);
+		CDB *reader = new CDB(getArg("dbfile"));
+		ret = reader->findall(searchkey);
+		delete reader;
 		free(key);
 
 		//Biggest item wins, so when we find something, we can jump out.
@@ -50,11 +52,9 @@ vector<string> TinyDNSBackend::getLocations()
 	return ret; 
 }
 
-//TODO: call destructor on d_cdb
 TinyDNSBackend::TinyDNSBackend(const string &suffix)
 {
 	setArgPrefix("tinydns"+suffix);
-	d_cdbReader=new CDB(getArg("dbfile"));
 	d_taiepoch = 4611686018427387904ULL + getArgAsNum("tai-adjust");
 }
 
@@ -63,8 +63,8 @@ bool TinyDNSBackend::list(const string &target, int domain_id)
 	d_isAxfr=true;
 	DNSLabel l(target.c_str());
 	string key = l.binary();
-	bool x = d_cdbReader->searchSuffix(key);
-	return x;
+	d_cdbReader=new CDB(getArg("dbfile"));
+	return d_cdbReader->searchSuffix(key);
 }
 
 void TinyDNSBackend::lookup(const QType &qtype, const string &qdomain, DNSPacket *pkt_p, int zoneId)
@@ -76,8 +76,8 @@ void TinyDNSBackend::lookup(const QType &qtype, const string &qdomain, DNSPacket
 	DNSLabel l(queryDomain.c_str());
 	string key=l.binary();
 
-	L<<Logger::Debug<<"[lookup] query for qtype ["<<qtype.getName()<<"] qdomain ["<<qdomain<<"]"<<endl;
-	L<<Logger::Debug<<"[lookup] key ["<<makeHexDump(key)<<"]"<<endl;
+	DLOG(L<<Logger::Debug<<"[lookup] query for qtype ["<<qtype.getName()<<"] qdomain ["<<qdomain<<"]"<<endl);
+	DLOG(L<<Logger::Debug<<"[lookup] key ["<<makeHexDump(key)<<"]"<<endl);
 
 	d_isWildcardQuery = false;
 	if (key[0] == '\001' && key[1] == '\052') {
@@ -86,6 +86,8 @@ void TinyDNSBackend::lookup(const QType &qtype, const string &qdomain, DNSPacket
 	}
 
 	d_qtype=qtype;
+
+	d_cdbReader=new CDB(getArg("dbfile"));
 	d_cdbReader->searchKey(key);
 	d_dnspacket = pkt_p;
 }
@@ -98,8 +100,8 @@ bool TinyDNSBackend::get(DNSResourceRecord &rr)
 		string val = record.second; 
 		string key = record.first;
 
-		DLOG(L<<Logger::Debug<<"[GET] Retrieved key: "<<makeHexDump(key)<<endl);
-		DLOG(L<<Logger::Debug<<"[GET] Retrieved val: "<<makeHexDump(val)<<endl);
+		DLOG(L<<Logger::Debug<<"[GET] Key: "<<makeHexDump(key)<<endl);
+		DLOG(L<<Logger::Debug<<"[GET] Val: "<<makeHexDump(val)<<endl);
 
 		if (!d_isAxfr) {
 			// If we have a wildcard query, but the record we got is not a wildcard, we skip.
@@ -207,6 +209,8 @@ bool TinyDNSBackend::get(DNSResourceRecord &rr)
 		}
 	} // end of while
 	DLOG(L<<Logger::Debug<<"No more records to return."<<endl);
+	
+	delete d_cdbReader;
 	return false;
 }
 

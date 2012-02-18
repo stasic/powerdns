@@ -15,11 +15,9 @@ class TinyDNSBackend : public DNSBackend
 {
 public:
 	TinyDNSBackend(const string &suffix);
-	//~TinyDNSBackend();
 	void lookup(const QType &qtype, const string &qdomain, DNSPacket *pkt_p=0, int zoneId=-1);
 	bool list(const string &target, int domain_id);
 	bool get(DNSResourceRecord &rr);
-	// bool getSOA(const string &name, SOAData &soadata, DNSPacket *p=0);
 private:
 	vector<string> getLocations();
 
