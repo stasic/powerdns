@@ -1,4 +1,5 @@
 #include "tinydnsbackend.hh"
+#include "pdns/lock.hh"
 #include <cdb.h>
 #include <pdns/dnslabel.hh>
 #include <pdns/misc.hh>
@@ -6,8 +7,12 @@
 #include <pdns/dnspacket.hh>
 #include <pdns/dnsrecords.hh>
 #include <utility>
+#include <boost/foreach.hpp>
+
 
 const string backendname="[TinyDNSBackend]";
+pthread_mutex_t TinyDNSBackend::s_domainInfoLock=PTHREAD_MUTEX_INITIALIZER;
+vector<DomainInfo> TinyDNSBackend::s_domainInfo;
 
 vector<string> TinyDNSBackend::getLocations()
 {
@@ -56,6 +61,40 @@ TinyDNSBackend::TinyDNSBackend(const string &suffix)
 {
 	setArgPrefix("tinydns"+suffix);
 	d_taiepoch = 4611686018427387904ULL + getArgAsNum("tai-adjust");
+
+	{
+		Lock l(&s_domainInfoLock); // we only want one thread to do this...
+		if (s_domainInfo.size() > 0) {
+			return;
+		}
+		d_cdbReader=new CDB(getArg("dbfile"));
+		d_cdbReader->searchAll();
+
+		DNSResourceRecord rr;
+
+		int i = 1;
+        	while (get(rr)) {
+			if (rr.qtype.getCode() == QType::SOA) {
+				SOAData sd;
+				fillSOAData(rr.content, sd);
+
+				DomainInfo di;
+				di.id = i++;
+				di.backend=this;
+				di.zone = rr.qname;
+				di.serial = sd.serial;
+				di.notified_serial = 0;
+				di.kind = DomainInfo::Master;
+				di.last_check = time(0);
+				s_domainInfo.push_back(di);
+			}
+		}
+
+		BOOST_FOREACH(DomainInfo di, s_domainInfo) {
+			L<<Logger::Debug<<"Found domain "<<di.zone<<" with serial "<<di.serial<<". Gets ID: "<<di.id<<endl;
+		}
+
+	}
 }
 
 bool TinyDNSBackend::list(const string &target, int domain_id)
@@ -92,6 +131,40 @@ void TinyDNSBackend::lookup(const QType &qtype, const string &qdomain, DNSPacket
 	d_dnspacket = pkt_p;
 }
 
+void TinyDNSBackend::getUpdatedMasters(vector<DomainInfo>* domains) {
+	cerr<<"UpdateMasters called."<<endl;
+	{
+		Lock l(&s_domainInfoLock);
+		for(vector<DomainInfo>::iterator di=s_domainInfo.begin(); di!=s_domainInfo.end(); ++di) {
+			SOAData sd;
+			getSOA(di->zone, sd);
+			if (di->notified_serial != sd.serial) {
+				cerr<<"Adding "<<di->zone<<". New serial:"<<di->serial<<";Notified_serial:"<<di->notified_serial<<endl;
+				di->serial = sd.serial;
+				domains->push_back(*di);
+			}
+		}
+	}
+}
+
+void TinyDNSBackend::setNotified(uint32_t id, uint32_t serial) {
+	cerr<<"SetNotified called"<<endl;
+	{
+		Lock l(&s_domainInfoLock);
+ 		 for(vector<DomainInfo>::iterator di=s_domainInfo.begin(); di!=s_domainInfo.end(); ++di) {
+			if (di->id == id) {
+				cerr<<"Setting "<<di->zone<<" with serial "<<serial<<endl;
+				di->notified_serial = serial;
+			}
+		}
+	}
+	cerr<<"SERIALS ARE NOW:"<<endl;
+	BOOST_FOREACH(DomainInfo di, s_domainInfo) {
+		cerr<<"Domain: "<<di.zone<<"; Serial:"<<di.serial<<"; notified_serial:"<<di.notified_serial<<endl;
+	}
+}
+
+
 bool TinyDNSBackend::get(DNSResourceRecord &rr)
 {
 	pair<string, string> record;
@@ -100,8 +173,8 @@ bool TinyDNSBackend::get(DNSResourceRecord &rr)
 		string val = record.second; 
 		string key = record.first;
 
-		DLOG(L<<Logger::Debug<<"[GET] Key: "<<makeHexDump(key)<<endl);
-		DLOG(L<<Logger::Debug<<"[GET] Val: "<<makeHexDump(val)<<endl);
+		//DLOG(L<<Logger::Debug<<"[GET] Key: "<<makeHexDump(key)<<endl);
+		//DLOG(L<<Logger::Debug<<"[GET] Val: "<<makeHexDump(val)<<endl);
 
 		if (!d_isAxfr) {
 			// If we have a wildcard query, but the record we got is not a wildcard, we skip.
@@ -124,8 +197,8 @@ bool TinyDNSBackend::get(DNSResourceRecord &rr)
 		copy(sval, sval+len, bytes.begin());
 		PacketReader pr(bytes);
 		valtype = QType(pr.get16BitInt());
-		DLOG(L<<Logger::Debug<<"[GET] ValType:"<<valtype.getName()<<endl);
-		DLOG(L<<Logger::Debug<<"[GET] QType:"<<d_qtype.getName()<<endl);
+		//DLOG(L<<Logger::Debug<<"[GET] ValType:"<<valtype.getName()<<endl);
+		//DLOG(L<<Logger::Debug<<"[GET] QType:"<<d_qtype.getName()<<endl);
 		char locwild = pr.get8BitInt();
 
 		if(locwild != '\075' && (locwild == '\076' || locwild == '\053')) 
@@ -204,7 +277,7 @@ bool TinyDNSBackend::get(DNSResourceRecord &rr)
 			{
 				rr.content = content;
 			}
-			DLOG(L<<Logger::Debug<<"Returning content: "<<rr.content<<endl);
+			DLOG(L<<Logger::Debug<<"Returning content "<<rr.content<<" of type "<<rr.qtype.getCode()<<endl);
 			return true;
 		}
 	} // end of while
