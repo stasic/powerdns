@@ -17,6 +17,7 @@ public:
 
 	int searchKey(const string &key);
 	bool searchSuffix(const string &key);
+	void searchAll();
 	bool readNext(pair<string, string> &value);
 	vector<string> findall(string &key);
 
@@ -26,7 +27,7 @@ private:
 	struct cdb_find d_cdbf;
 	char *d_key;
 	unsigned d_seqPtr;
-	bool d_search;
+	int d_searchType; // Indicate what this instance of CDB is looking for.
 };
 
 #endif // CDB_HH 

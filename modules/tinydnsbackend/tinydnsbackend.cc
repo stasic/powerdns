@@ -1,4 +1,5 @@
 #include "tinydnsbackend.hh"
+#include "pdns/lock.hh"
 #include <cdb.h>
 #include <pdns/dnslabel.hh>
 #include <pdns/misc.hh>
@@ -6,8 +7,13 @@
 #include <pdns/dnspacket.hh>
 #include <pdns/dnsrecords.hh>
 #include <utility>
+#include <boost/foreach.hpp>
+
 
 const string backendname="[TinyDNSBackend]";
+pthread_mutex_t TinyDNSBackend::s_domainInfoLock=PTHREAD_MUTEX_INITIALIZER;
+vector<DomainInfo> TinyDNSBackend::s_domainInfo;
+
 
 vector<string> TinyDNSBackend::getLocations()
 {
@@ -56,10 +62,111 @@ TinyDNSBackend::TinyDNSBackend(const string &suffix)
 {
 	setArgPrefix("tinydns"+suffix);
 	d_taiepoch = 4611686018427387904ULL + getArgAsNum("tai-adjust");
+
+	{
+		Lock l(&s_domainInfoLock); // we only want one thread to do this...
+		if (s_domainInfo.size() > 0) {
+			return;
+		}
+		s_domainInfo = getDomainInfo();
+		BOOST_FOREACH(DomainInfo di, s_domainInfo) {
+			DLOG(L<<Logger::Info<<backendname<<" Found domain "<<di.zone<<" with serial "<<di.serial<<". Gets ID:"<<di.id<<endl);
+		}
+
+	}
 }
 
-bool TinyDNSBackend::list(const string &target, int domain_id)
-{
+void TinyDNSBackend::getUpdatedMasters(vector<DomainInfo>* domains) {
+	Lock l(&s_domainInfoLock);
+	vector<DomainInfo> freshDomains = getDomainInfo();
+
+	bool found = false;
+	BOOST_FOREACH(DomainInfo freshDi, freshDomains) {
+		found = false;
+		for(vector<DomainInfo>::iterator di=s_domainInfo.begin(); di!=s_domainInfo.end(); ++di) {
+			if (di->zone.compare(freshDi.zone) == 0) {
+				found=true;
+				if (di->notified_serial != freshDi.serial) {
+					DLOG(L<<Logger::Debug<<"Adding "<<di->zone<<". New serial:"<<freshDi.serial<<";Notified_serial:"<<di->notified_serial<<endl);
+					di->serial = freshDi.serial;
+					domains->push_back(*di);
+					break;
+				}
+			}
+		}
+		if (!found) {
+			DLOG(L<<Logger::Info<<"Found new domain while checking if we have updated serials: "<<freshDi.zone<<endl);
+			s_domainInfo.push_back(freshDi);
+			domains->push_back(freshDi);
+		}
+	}
+
+	int remItem = 0;
+	set<uint32_t> removeItems;
+	for(vector<DomainInfo>::iterator di=s_domainInfo.begin(); di!=s_domainInfo.end(); ++di) {
+		found = false;
+		BOOST_FOREACH(DomainInfo freshDi, freshDomains) {
+			if (di->zone.compare(freshDi.zone) == 0) {
+				found = true;
+				break;
+			}
+		}
+		if (!found) {
+			removeItems.insert(remItem);
+			DLOG(L<<Logger::Info<<"Did not find zone "<<di->zone<<" while doing updated serials check. Removing!"<<endl);
+		}
+		remItem++;
+	}
+	BOOST_FOREACH(uint32_t rem, removeItems) {
+		s_domainInfo.erase(s_domainInfo.begin() + rem);
+	}
+}
+
+void TinyDNSBackend::setNotified(uint32_t id, uint32_t serial) {
+	Lock l(&s_domainInfoLock);
+	for(vector<DomainInfo>::iterator di=s_domainInfo.begin(); di!=s_domainInfo.end(); ++di) {
+		if (di->id == id) {
+			DLOG(L<<Logger::Debug<<"Setting serial for "<<di->zone<<" to "<<serial<<endl);
+			di->notified_serial = serial;
+		}
+	}
+}
+
+
+vector<DomainInfo> TinyDNSBackend::getDomainInfo() {
+	d_isAxfr=true;
+	vector<DomainInfo> ret;
+
+	d_cdbReader=new CDB(getArg("dbfile"));
+	d_cdbReader->searchAll();
+	DNSResourceRecord rr;
+
+	int i = 1;
+       	while (get(rr)) {
+		i++;
+		if (rr.qtype.getCode() == QType::SOA) {
+			SOAData sd;
+			fillSOAData(rr.content, sd);
+
+			DomainInfo di;
+			di.id = i++;
+			di.backend=this;
+			di.zone = rr.qname;
+			di.serial = sd.serial;
+			if(mustDo("notify-on-startup")) {
+				di.notified_serial = 0;
+			} else {
+				di.notified_serial = sd.serial;
+			}
+			di.kind = DomainInfo::Master;
+			di.last_check = time(0);
+			ret.push_back(di);
+		}
+	}
+	return ret;
+}
+
+bool TinyDNSBackend::list(const string &target, int domain_id) {
 	d_isAxfr=true;
 	DNSLabel l(target.c_str());
 	string key = l.binary();
@@ -67,8 +174,7 @@ bool TinyDNSBackend::list(const string &target, int domain_id)
 	return d_cdbReader->searchSuffix(key);
 }
 
-void TinyDNSBackend::lookup(const QType &qtype, const string &qdomain, DNSPacket *pkt_p, int zoneId)
-{
+void TinyDNSBackend::lookup(const QType &qtype, const string &qdomain, DNSPacket *pkt_p, int zoneId) {
 	d_isAxfr = false;
 	string queryDomain(qdomain.c_str(), qdomain.size());
 	transform(queryDomain.begin(), queryDomain.end(), queryDomain.begin(), ::tolower);
@@ -77,7 +183,7 @@ void TinyDNSBackend::lookup(const QType &qtype, const string &qdomain, DNSPacket
 	string key=l.binary();
 
 	DLOG(L<<Logger::Debug<<"[lookup] query for qtype ["<<qtype.getName()<<"] qdomain ["<<qdomain<<"]"<<endl);
-	DLOG(L<<Logger::Debug<<"[lookup] key ["<<makeHexDump(key)<<"]"<<endl);
+//	DLOG(L<<Logger::Debug<<"[lookup] key ["<<makeHexDump(key)<<"]"<<endl);
 
 	d_isWildcardQuery = false;
 	if (key[0] == '\001' && key[1] == '\052') {
@@ -92,6 +198,7 @@ void TinyDNSBackend::lookup(const QType &qtype, const string &qdomain, DNSPacket
 	d_dnspacket = pkt_p;
 }
 
+
 bool TinyDNSBackend::get(DNSResourceRecord &rr)
 {
 	pair<string, string> record;
@@ -100,8 +207,8 @@ bool TinyDNSBackend::get(DNSResourceRecord &rr)
 		string val = record.second; 
 		string key = record.first;
 
-		DLOG(L<<Logger::Debug<<"[GET] Key: "<<makeHexDump(key)<<endl);
-		DLOG(L<<Logger::Debug<<"[GET] Val: "<<makeHexDump(val)<<endl);
+		//DLOG(L<<Logger::Debug<<"[GET] Key: "<<makeHexDump(key)<<endl);
+		//DLOG(L<<Logger::Debug<<"[GET] Val: "<<makeHexDump(val)<<endl);
 
 		if (!d_isAxfr) {
 			// If we have a wildcard query, but the record we got is not a wildcard, we skip.
@@ -124,8 +231,8 @@ bool TinyDNSBackend::get(DNSResourceRecord &rr)
 		copy(sval, sval+len, bytes.begin());
 		PacketReader pr(bytes);
 		valtype = QType(pr.get16BitInt());
-		DLOG(L<<Logger::Debug<<"[GET] ValType:"<<valtype.getName()<<endl);
-		DLOG(L<<Logger::Debug<<"[GET] QType:"<<d_qtype.getName()<<endl);
+		//DLOG(L<<Logger::Debug<<"[GET] ValType:"<<valtype.getName()<<endl);
+		//DLOG(L<<Logger::Debug<<"[GET] QType:"<<d_qtype.getName()<<endl);
 		char locwild = pr.get8BitInt();
 
 		if(locwild != '\075' && (locwild == '\076' || locwild == '\053')) 
@@ -150,8 +257,7 @@ bool TinyDNSBackend::get(DNSResourceRecord &rr)
 				continue;
 			} 
 		}
-		if(d_qtype.getCode()==QType::ANY || valtype==d_qtype || d_isAxfr)
-		{
+		if(d_qtype.getCode()==QType::ANY || valtype==d_qtype || d_isAxfr) {
 			// if we do an AXFR and we have a wildcard record, we need to add \001\052 before it.
 			if (d_isAxfr && (val[2] == '\052' || val[2] == '\053' )) {
 				key.insert(0, 1, '\052');
@@ -163,25 +269,23 @@ bool TinyDNSBackend::get(DNSResourceRecord &rr)
 			rr.qname = rr.qname.erase(rr.qname.size()-1, 1);
 			rr.qtype = valtype;
 			rr.ttl = pr.get32BitInt();
-			//TODO: we're not always out. See Rectify zone
+			
+			rr.domain_id=-1;
+			//TODO: 11:13.21 <@ahu> IT IS ALWAYS AUTH --- well not really because we are just a backend :-)
+			// We could actually do NSEC3-NARROW DNSSEC according to Habbie, if we do, we need to change something ehre. 
 			rr.auth = true;
 
 			uint64_t timestamp = pr.get32BitInt();
 			timestamp <<= 32;
 			timestamp += pr.get32BitInt();
-			if(timestamp) 
-			{
+			if(timestamp) {
 				uint64_t now = d_taiepoch + time(NULL);
-				if (rr.ttl == 0)
-				{
-					if (timestamp < now)
-					{
+				if (rr.ttl == 0) {
+					if (timestamp < now) {
 						continue;
 					}
 					rr.ttl = timestamp - now; 
-				}
-				else if (now <= timestamp)
-				{
+				} else if (now <= timestamp) {
 					continue;
 				}
 			}
@@ -193,18 +297,15 @@ bool TinyDNSBackend::get(DNSResourceRecord &rr)
 			DNSRecordContent *drc = DNSRecordContent::mastermake(dr, pr);
 
 			string content = drc->getZoneRepresentation();
-			if(rr.qtype.getCode() == QType::MX || rr.qtype.getCode() == QType::SRV)
-			{
+			if(rr.qtype.getCode() == QType::MX || rr.qtype.getCode() == QType::SRV) {
 				vector<string>parts;
 				stringtok(parts,content," ");
 				rr.priority=atoi(parts[0].c_str());
 				rr.content=content.substr(parts[0].size()+1);
-			}
-			else
-			{
+			} else {
 				rr.content = content;
 			}
-			DLOG(L<<Logger::Debug<<"Returning content: "<<rr.content<<endl);
+			DLOG(L<<Logger::Debug<<backendname<<" Returning ["<<rr.content<<"] for ["<<rr.qname<<"] of RecordType ["<<rr.qtype.getName()<<"]"<<endl;);
 			return true;
 		}
 	} // end of while
@@ -220,15 +321,14 @@ class TinyDNSFactory: public BackendFactory
 public:
 	TinyDNSFactory() : BackendFactory("tinydns") {}
 
-	void declareArguments(const string &suffix="")
-	{
+	void declareArguments(const string &suffix="") {
+		declare(suffix, "notify-on-startup", "Tell the TinyDNSBackend to nofity all the nameservers on startup. Default is yes.", "yes");
 		declare(suffix, "dbfile", "Location of the cdb data file", "data.cdb");
 		declare(suffix, "tai-adjust", "This adjusts the TAI value if timestamps are used. These seconds will be added to the start point (1970) and will allow you to adjust for leap seconds. The default is 10.", "10");
 	}
 
 
-	DNSBackend *make(const string &suffix="")
-	{
+	DNSBackend *make(const string &suffix="") {
 		return new TinyDNSBackend(suffix);
 	}
 };
@@ -237,8 +337,7 @@ public:
 class TinyDNSLoader
 {
 public:
-	TinyDNSLoader()
-	{
+	TinyDNSLoader() {
 		BackendMakers().report(new TinyDNSFactory);
 		L<<Logger::Info<<" [TinyDNSBackend] This is the TinyDNSBackend ("__DATE__", "__TIME__") reporting"<<endl;
 	}
