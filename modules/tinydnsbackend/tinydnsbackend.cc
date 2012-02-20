@@ -132,23 +132,20 @@ void TinyDNSBackend::lookup(const QType &qtype, const string &qdomain, DNSPacket
 }
 
 void TinyDNSBackend::getUpdatedMasters(vector<DomainInfo>* domains) {
-	cerr<<"UpdateMasters called."<<endl;
-	{
-		Lock l(&s_domainInfoLock);
-		for(vector<DomainInfo>::iterator di=s_domainInfo.begin(); di!=s_domainInfo.end(); ++di) {
-			SOAData sd;
-			getSOA(di->zone, sd);
-			if (di->notified_serial != sd.serial) {
-				cerr<<"Adding "<<di->zone<<". New serial:"<<di->serial<<";Notified_serial:"<<di->notified_serial<<endl;
-				di->serial = sd.serial;
-				domains->push_back(*di);
-			}
+	Lock l(&s_domainInfoLock);
+	//TODO: need to 'rescan' all records; we don't notice a new domain being added or deleted!
+	for(vector<DomainInfo>::iterator di=s_domainInfo.begin(); di!=s_domainInfo.end(); ++di) {
+		SOAData sd;
+		getSOA(di->zone, sd); // This might fail if the domain was removed?
+		if (di->notified_serial != sd.serial) {
+			cerr<<"Adding "<<di->zone<<". New serial:"<<di->serial<<";Notified_serial:"<<di->notified_serial<<endl;
+			di->serial = sd.serial;
+			domains->push_back(*di);
 		}
 	}
 }
 
 void TinyDNSBackend::setNotified(uint32_t id, uint32_t serial) {
-	cerr<<"SetNotified called"<<endl;
 	{
 		Lock l(&s_domainInfoLock);
  		 for(vector<DomainInfo>::iterator di=s_domainInfo.begin(); di!=s_domainInfo.end(); ++di) {
@@ -157,10 +154,6 @@ void TinyDNSBackend::setNotified(uint32_t id, uint32_t serial) {
 				di->notified_serial = serial;
 			}
 		}
-	}
-	cerr<<"SERIALS ARE NOW:"<<endl;
-	BOOST_FOREACH(DomainInfo di, s_domainInfo) {
-		cerr<<"Domain: "<<di.zone<<"; Serial:"<<di.serial<<"; notified_serial:"<<di.notified_serial<<endl;
 	}
 }
 
