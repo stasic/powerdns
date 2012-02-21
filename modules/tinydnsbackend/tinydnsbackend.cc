@@ -257,7 +257,7 @@ bool TinyDNSBackend::get(DNSResourceRecord &rr)
 				continue;
 			} 
 		}
-		if(d_qtype.getCode()==QType::ANY || valtype==d_qtype || d_isAxfr) {
+		if(d_isAxfr || d_qtype.getCode() == QType::ANY || valtype == d_qtype) {
 			// if we do an AXFR and we have a wildcard record, we need to add \001\052 before it.
 			if (d_isAxfr && (val[2] == '\052' || val[2] == '\053' )) {
 				key.insert(0, 1, '\052');
