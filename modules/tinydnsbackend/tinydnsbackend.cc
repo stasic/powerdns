@@ -65,7 +65,6 @@ TinyDNSBackend::TinyDNSBackend(const string &suffix)
 }
 
 void TinyDNSBackend::getUpdatedMasters(vector<DomainInfo>* domains) {
-	cerr<<"GetUpdatedMasters"<<endl;
 	Lock l(&s_domainInfoLock);
 	
 	if (s_domainInfo.size() == 0) {
