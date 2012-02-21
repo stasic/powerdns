@@ -297,6 +297,7 @@ bool TinyDNSBackend::get(DNSResourceRecord &rr)
 			DNSRecordContent *drc = DNSRecordContent::mastermake(dr, pr);
 
 			string content = drc->getZoneRepresentation();
+			delete drc;
 			if(rr.qtype.getCode() == QType::MX || rr.qtype.getCode() == QType::SRV) {
 				vector<string>parts;
 				stringtok(parts,content," ");
