@@ -62,23 +62,23 @@ TinyDNSBackend::TinyDNSBackend(const string &suffix)
 {
 	setArgPrefix("tinydns"+suffix);
 	d_taiepoch = 4611686018427387904ULL + getArgAsNum("tai-adjust");
-
-	{
-		Lock l(&s_domainInfoLock); // we only want one thread to do this...
-		if (s_domainInfo.size() > 0) {
-			return;
-		}
-		s_domainInfo = getDomainInfo();
-		BOOST_FOREACH(DomainInfo di, s_domainInfo) {
-			DLOG(L<<Logger::Info<<backendname<<" Found domain "<<di.zone<<" with serial "<<di.serial<<". Gets ID:"<<di.id<<endl);
-		}
-
-	}
 }
 
 void TinyDNSBackend::getUpdatedMasters(vector<DomainInfo>* domains) {
+	cerr<<"GetUpdatedMasters"<<endl;
 	Lock l(&s_domainInfoLock);
-	vector<DomainInfo> freshDomains = getDomainInfo();
+	
+	if (s_domainInfo.size() == 0) {
+		bool notifyOnStartup = mustDo("notify-on-startup");
+		s_domainInfo = getDomainInfo(notifyOnStartup == false);
+		
+		// little bit of optimization at startup.
+		if (! notifyOnStartup) {
+			return;	
+		}
+	}
+
+	vector<DomainInfo> freshDomains = getDomainInfo(true);
 
 	bool found = false;
 	BOOST_FOREACH(DomainInfo freshDi, freshDomains) {
@@ -133,7 +133,7 @@ void TinyDNSBackend::setNotified(uint32_t id, uint32_t serial) {
 }
 
 
-vector<DomainInfo> TinyDNSBackend::getDomainInfo() {
+vector<DomainInfo> TinyDNSBackend::getDomainInfo(bool setSerial) {
 	d_isAxfr=true;
 	vector<DomainInfo> ret;
 
@@ -153,10 +153,10 @@ vector<DomainInfo> TinyDNSBackend::getDomainInfo() {
 			di.backend=this;
 			di.zone = rr.qname;
 			di.serial = sd.serial;
-			if(mustDo("notify-on-startup")) {
-				di.notified_serial = 0;
-			} else {
+			if(setSerial) {
 				di.notified_serial = sd.serial;
+			} else {
+				di.notified_serial = 0;
 			}
 			di.kind = DomainInfo::Master;
 			di.last_check = time(0);
@@ -305,7 +305,7 @@ bool TinyDNSBackend::get(DNSResourceRecord &rr)
 			} else {
 				rr.content = content;
 			}
-			DLOG(L<<Logger::Debug<<backendname<<" Returning ["<<rr.content<<"] for ["<<rr.qname<<"] of RecordType ["<<rr.qtype.getName()<<"]"<<endl;);
+//			DLOG(L<<Logger::Debug<<backendname<<" Returning ["<<rr.content<<"] for ["<<rr.qname<<"] of RecordType ["<<rr.qtype.getName()<<"]"<<endl;);
 			return true;
 		}
 	} // end of while

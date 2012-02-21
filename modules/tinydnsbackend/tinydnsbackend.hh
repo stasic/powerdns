@@ -27,7 +27,7 @@ public:
 	void setNotified(uint32_t id, uint32_t serial);
 private:
 	vector<string> getLocations();
-	vector<DomainInfo> getDomainInfo();
+	vector<DomainInfo> getDomainInfo(bool setSerial = true);
 
 	//data member variables
 	uint64_t d_taiepoch;
