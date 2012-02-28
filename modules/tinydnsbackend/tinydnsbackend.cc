@@ -69,15 +69,20 @@ void TinyDNSBackend::getUpdatedMasters(vector<DomainInfo>* domains) {
 	
 	if (s_domainInfo.size() == 0) {
 		bool notifyOnStartup = mustDo("notify-on-startup");
-		s_domainInfo = getDomainInfo(notifyOnStartup == false);
+		getAllDomains(&s_domainInfo);
 		
 		// little bit of optimization at startup.
 		if (! notifyOnStartup) {
 			return;	
+		} else {
+			for(vector<DomainInfo>::iterator di=s_domainInfo.begin(); di!=s_domainInfo.end(); ++di) {
+				di->serial = 0;
+			}
 		}
 	}
 
-	vector<DomainInfo> freshDomains = getDomainInfo(true);
+	vector<DomainInfo> freshDomains; 
+	getAllDomains(&freshDomains);
 
 	bool found = false;
 	BOOST_FOREACH(DomainInfo freshDi, freshDomains) {
@@ -131,10 +136,8 @@ void TinyDNSBackend::setNotified(uint32_t id, uint32_t serial) {
 	}
 }
 
-
-vector<DomainInfo> TinyDNSBackend::getDomainInfo(bool setSerial) {
+void TinyDNSBackend::getAllDomains(vector<DomainInfo> *domains) {
 	d_isAxfr=true;
-	vector<DomainInfo> ret;
 
 	d_cdbReader=new CDB(getArg("dbfile"));
 	d_cdbReader->searchAll();
@@ -152,17 +155,12 @@ vector<DomainInfo> TinyDNSBackend::getDomainInfo(bool setSerial) {
 			di.backend=this;
 			di.zone = rr.qname;
 			di.serial = sd.serial;
-			if(setSerial) {
-				di.notified_serial = sd.serial;
-			} else {
-				di.notified_serial = 0;
-			}
+			di.notified_serial = sd.serial;
 			di.kind = DomainInfo::Master;
 			di.last_check = time(0);
-			ret.push_back(di);
+			domains->push_back(di);
 		}
 	}
-	return ret;
 }
 
 bool TinyDNSBackend::list(const string &target, int domain_id) {
