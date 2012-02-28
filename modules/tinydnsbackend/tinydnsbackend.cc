@@ -76,7 +76,7 @@ void TinyDNSBackend::getUpdatedMasters(vector<DomainInfo>* domains) {
 			return;	
 		} else {
 			for(vector<DomainInfo>::iterator di=s_domainInfo.begin(); di!=s_domainInfo.end(); ++di) {
-				di->serial = 0;
+				di->notified_serial = 0;
 			}
 		}
 	}
