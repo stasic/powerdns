@@ -106,8 +106,8 @@ __EOF__
 				--no-shuffle --launch=tinydns \
 				--query-logging --loglevel=9 --cache-ttl=0 --no-config \
 				--send-root-referral \
-				--tinydns-dbfile=../modules/tinydnsbackend/data.cdb \
-				--load-modules=../modules/tinydnsbackend/.libs/libtinydnsbackend.so &
+				--tinydns-dbfile=../modules/tinydnsbackend/data.cdb & 
+			skipreasons=nodnssec
 			;;
 		*)
 			echo unknown context $context
