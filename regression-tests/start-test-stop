@@ -129,6 +129,14 @@ __EOF__
 				extracontexts=nsec3
 			fi
 			;;			
+		tinydns)
+			../pdns/pdns_server --daemon=no --local-port=$port --socket-dir=./ \
+				--no-shuffle --launch=tinydns \
+				--query-logging --loglevel=9 --cache-ttl=0 --no-config \
+				--send-root-referral \
+				--tinydns-dbfile=../modules/tinydnsbackend/data.cdb & 
+			skipreasons=nodnssec
+			;;
 		*)
 			echo unknown context $context
 			: > passed_tests

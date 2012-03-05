@@ -1,0 +1,6 @@
+eac728be686ab804c3cd28f14ced6d3c  ../regression-tests/example.com
+33e43585aeed4eb9af10a83c72a04d14  ../regression-tests/test.com
+69fa9933e774f332b59c73b041febe18  ../regression-tests/wtest.com
+a0670eef8fba3e16908057af8de2c2f2  ../regression-tests/dnssec-parent.com
+42dd3a56c7d268e75836371878819ec4  ../regression-tests/delegated.dnssec-parent.com
+1d1b64d367cd552364e5ffabfeaacf11  ../modules/tinydnsbackend/data.cdb

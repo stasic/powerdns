@@ -1,0 +1,4 @@
+#!/bin/sh
+
+#cleandig example.com AXFR @$nameserver
+drill test.com -p $port @$nameserver AXFR
