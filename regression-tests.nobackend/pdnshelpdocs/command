@@ -1,6 +1,11 @@
 #!/usr/bin/env python
-from lxml import etree
-import subprocess, sys
+import sys
+try:
+	from lxml import etree
+	import subprocess, sys
+except ImportError:
+	print "lxml missing, no check performed"
+	sys.exit()
 
 doc = etree.parse(file('../pdns/docs/pdns.xml'), parser=etree.XMLParser(load_dtd=True))
 
