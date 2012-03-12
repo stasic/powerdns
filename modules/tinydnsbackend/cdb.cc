@@ -12,14 +12,14 @@ CDB::CDB(const string &cdbfile)
 	if (fd < 0)
 	{
 		L<<Logger::Error<<"Failed to open cdb database file '"<<cdbfile<<"'. Error: "<<stringerror()<<endl;
-		throw new AhuException(backendname + " Failed to open cdb database file '"+cdbfile+"'. Error: " + stringerror());
+		throw new AhuException("Failed to open cdb database file '"+cdbfile+"'. Error: " + stringerror());
 	}
 
 	int cdbinit = cdb_init(&d_cdb, fd);
 	if (cdbinit < 0) 
 	{
 		L<<Logger::Error<<"Failed to initialize cdb database. ErrorNr: '"<<cdbinit<<endl;
-		throw new AhuException(backendname + " Failed to initialize cdb database.");
+		throw new AhuException("Failed to initialize cdb database.");
 	}
 }
 
