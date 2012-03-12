@@ -173,8 +173,7 @@ bool TinyDNSBackend::list(const string &target, int domain_id) {
 
 void TinyDNSBackend::lookup(const QType &qtype, const string &qdomain, DNSPacket *pkt_p, int zoneId) {
 	d_isAxfr = false;
-	string queryDomain(qdomain.c_str(), qdomain.size());
-	transform(queryDomain.begin(), queryDomain.end(), queryDomain.begin(), ::tolower);
+	string queryDomain = toLowerCanonic(qdomain);
 
 	DNSLabel l(queryDomain.c_str());
 	string key=l.binary();
