@@ -10,7 +10,7 @@
 #include <boost/foreach.hpp>
 
 
-const string backendname="[TinyDNSBackend]";
+static string backendname="[TinyDNSBackend]";
 pthread_mutex_t TinyDNSBackend::s_domainInfoLock=PTHREAD_MUTEX_INITIALIZER;
 vector<DomainInfo> TinyDNSBackend::s_domainInfo;
 
@@ -91,7 +91,7 @@ void TinyDNSBackend::getUpdatedMasters(vector<DomainInfo>* domains) {
 			if (di->zone.compare(freshDi.zone) == 0) {
 				found=true;
 				if (di->notified_serial != freshDi.serial) {
-					DLOG(L<<Logger::Debug<<"Adding "<<di->zone<<". New serial:"<<freshDi.serial<<";Notified_serial:"<<di->notified_serial<<endl);
+					DLOG(L<<Logger::Debug<<backendname<<"Adding "<<di->zone<<". New serial:"<<freshDi.serial<<";Notified_serial:"<<di->notified_serial<<endl);
 					di->serial = freshDi.serial;
 					domains->push_back(*di);
 					break;
@@ -99,7 +99,7 @@ void TinyDNSBackend::getUpdatedMasters(vector<DomainInfo>* domains) {
 			}
 		}
 		if (!found) {
-			DLOG(L<<Logger::Info<<"Found new domain while checking if we have updated serials: "<<freshDi.zone<<endl);
+			DLOG(L<<Logger::Info<<backendname<<"Found new domain while checking if we have updated serials: "<<freshDi.zone<<endl);
 			s_domainInfo.push_back(freshDi);
 			domains->push_back(freshDi);
 		}
@@ -117,7 +117,7 @@ void TinyDNSBackend::getUpdatedMasters(vector<DomainInfo>* domains) {
 		}
 		if (!found) {
 			removeItems.insert(remItem);
-			DLOG(L<<Logger::Info<<"Did not find zone "<<di->zone<<" while doing updated serials check. Removing!"<<endl);
+			DLOG(L<<Logger::Info<<backendname<<"Did not find zone "<<di->zone<<" while doing updated serials check. Removing!"<<endl);
 		}
 		remItem++;
 	}
@@ -130,7 +130,7 @@ void TinyDNSBackend::setNotified(uint32_t id, uint32_t serial) {
 	Lock l(&s_domainInfoLock);
 	for(vector<DomainInfo>::iterator di=s_domainInfo.begin(); di!=s_domainInfo.end(); ++di) {
 		if (di->id == id) {
-			DLOG(L<<Logger::Debug<<"Setting serial for "<<di->zone<<" to "<<serial<<endl);
+			DLOG(L<<Logger::Debug<<backendname<<"Setting serial for "<<di->zone<<" to "<<serial<<endl);
 			di->notified_serial = serial;
 		}
 	}
@@ -144,7 +144,7 @@ void TinyDNSBackend::getAllDomains(vector<DomainInfo> *domains) {
 	DNSResourceRecord rr;
 
 	int i = 1;
-       	while (get(rr)) {
+	while (get(rr)) {
 		i++;
 		if (rr.qtype.getCode() == QType::SOA) {
 			SOAData sd;
@@ -179,7 +179,7 @@ void TinyDNSBackend::lookup(const QType &qtype, const string &qdomain, DNSPacket
 	DNSLabel l(queryDomain.c_str());
 	string key=l.binary();
 
-	DLOG(L<<Logger::Debug<<"[lookup] query for qtype ["<<qtype.getName()<<"] qdomain ["<<qdomain<<"]"<<endl);
+	DLOG(L<<Logger::Debug<<backendname<<"[lookup] query for qtype ["<<qtype.getName()<<"] qdomain ["<<qdomain<<"]"<<endl);
 //	DLOG(L<<Logger::Debug<<"[lookup] key ["<<makeHexDump(key)<<"]"<<endl);
 
 	d_isWildcardQuery = false;
@@ -307,7 +307,7 @@ bool TinyDNSBackend::get(DNSResourceRecord &rr)
 			return true;
 		}
 	} // end of while
-	DLOG(L<<Logger::Debug<<"No more records to return."<<endl);
+	DLOG(L<<Logger::Debug<<backendname<<"No more records to return."<<endl);
 	
 	delete d_cdbReader;
 	return false;
