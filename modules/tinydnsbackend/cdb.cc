@@ -5,21 +5,20 @@
 #include <utility>
 
 
-const string backendname="[TinyDNSBackend]";
 CDB::CDB(const string &cdbfile)
 {
 	
 	int fd = open(cdbfile.c_str(), O_RDONLY);
 	if (fd < 0)
 	{
-		L<<Logger::Error<<backendname<<" Failed to open cdb database file '"<<cdbfile<<"'. Error: "<<stringerror()<<endl;
+		L<<Logger::Error<<"Failed to open cdb database file '"<<cdbfile<<"'. Error: "<<stringerror()<<endl;
 		throw new AhuException(backendname + " Failed to open cdb database file '"+cdbfile+"'. Error: " + stringerror());
 	}
 
 	int cdbinit = cdb_init(&d_cdb, fd);
 	if (cdbinit < 0) 
 	{
-		L<<Logger::Error<<backendname<<" Failed to initialize cdb database. ErrorNr: '"<<cdbinit<<endl;
+		L<<Logger::Error<<"Failed to initialize cdb database. ErrorNr: '"<<cdbinit<<endl;
 		throw new AhuException(backendname + " Failed to initialize cdb database.");
 	}
 }
