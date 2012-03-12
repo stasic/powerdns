@@ -27,7 +27,7 @@ private:
 	struct cdb_find d_cdbf;
 	char *d_key;
 	unsigned d_seqPtr;
-	int d_searchType; // Indicate what this instance of CDB is looking for.
+	enum SearchType { SearchSuffix, SearchKey, SearchAll } d_searchType;
 };
 
 #endif // CDB_HH 

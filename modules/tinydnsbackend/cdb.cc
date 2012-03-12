@@ -29,7 +29,7 @@ CDB::~CDB() {
 }
 
 int CDB::searchKey(const string &key) {
-	d_searchType = 1;
+	d_searchType = SearchKey; 
 
 	// A 'bug' in tinycdb (the lib used for reading the CDB files) means we have to copy the key because the cdb_find struct
 	// keeps a pointer to it.
@@ -38,7 +38,7 @@ int CDB::searchKey(const string &key) {
 }
 
 bool CDB::searchSuffix(const string &key) {
-	d_searchType = 2;
+	d_searchType = SearchSuffix;
 
 	//See CDB::searchKey() 
 	d_key = strdup(key.c_str());
@@ -53,20 +53,16 @@ bool CDB::searchSuffix(const string &key) {
 }
 
 void CDB::searchAll() {
-	d_searchType = 3;
+	d_searchType = SearchAll;
 	cdb_seqinit(&d_seqPtr, &d_cdb);
 }
 
 bool CDB::moveToNext() {
 	int hasNext = 0;
-	switch(d_searchType) {
-		case 1:
-			hasNext = cdb_findnext(&d_cdbf);
-			break;
-		case 2:
-		case 3:
-			hasNext = cdb_seqnext(&d_seqPtr, &d_cdb);
-			break;
+	if (d_searchType == SearchKey) {
+		hasNext = cdb_findnext(&d_cdbf);
+	} else {
+		hasNext = cdb_seqnext(&d_seqPtr, &d_cdb);
 	}
 	return (hasNext > 0);
 }
@@ -82,7 +78,7 @@ bool CDB::readNext(pair<string, string> &value) {
 		char *key = (char *)malloc(len);
 		cdb_read(&d_cdb, key, len, pos);
 		
-		if (d_searchType == 2) {
+		if (d_searchType == SearchSuffix) {
 			char *p = strstr(key, d_key);
         	        if (p == NULL) {
                         	free(key);
@@ -103,7 +99,7 @@ bool CDB::readNext(pair<string, string> &value) {
 		return true;
 	}
 	// We're done searching, so we can clean up d_key
-	if (d_searchType != 3) {
+	if (d_searchType != SearchAll) {
 		free(d_key);
 	}
 	return false;
