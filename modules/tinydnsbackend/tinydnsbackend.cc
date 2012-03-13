@@ -68,40 +68,51 @@ TinyDNSBackend::TinyDNSBackend(const string &suffix)
 
 void TinyDNSBackend::getUpdatedMasters(vector<DomainInfo>* retDomains) {
 	Lock l(&s_domainInfoLock); //TODO: We could actually lock less if we do it per suffix.
-	TDI_t domains;
+	TDI_t *domains;
 	if (s_domainInfo.count(d_suffix)) {
-		domains = s_domainInfo[d_suffix];
+		domains = &s_domainInfo[d_suffix];
+		cerr<<"Domains count:"<<domains->size()<<endl;
 	} else {
-		s_domainInfo.insert(pair<string, TDI_t>(d_suffix, domains));
+		domains = new TDI_t; 
 	}
 
 	vector<DomainInfo> allDomains;
 	getAllDomains(&allDomains);
-	if (domains.size() == 0 && mustDo("notify-on-startup")) {
+	if (domains->size() == 0 && mustDo("notify-on-startup")) {
+		cerr<<"SETTING SERIAL"<<endl;
 		for (vector<DomainInfo>::iterator di=allDomains.begin(); di!=allDomains.end(); ++di) {
 			di->notified_serial = 0;
 		}
 	}
 
 	for(vector<DomainInfo>::iterator di=allDomains.begin(); di!=allDomains.end(); ++di) {
-		TDIByZone_t& zone_index = domains.get<tag_zone>();
+		cerr<<"Iterating through domain:"<<di->zone<<endl;
+		TDIByZone_t& zone_index = domains->get<tag_zone>();
 		TDIByZone_t::iterator itByZone = zone_index.find(di->zone);
 		if (itByZone == zone_index.end()) {
-			retDomains->push_back(*di);
+			cerr<<"Zone not found."<<endl;
 			TinyDomainInfo tmp;
 			tmp.zone = di->zone;
-			tmp.id = s_lastId++;
+			s_lastId++;
+			tmp.id = s_lastId;
+			cerr<<"Zone not found, added ID"<<tmp.id<<"; serial: "<<di->serial<<endl;
 			tmp.notified_serial = di->serial;
-			domains.insert(tmp);
+			domains->insert(tmp);
 		} else {
+			cerr<<"Zone found"<<endl;
 			if (itByZone->notified_serial < di->serial) {
+				cerr<<"Adding to change set"<<endl;
+				di->id = itByZone->id;
 				retDomains->push_back(*di);
 			}
 		}
 	}
+
+	s_domainInfo[d_suffix] = *domains;
 }
 
 void TinyDNSBackend::setNotified(uint32_t id, uint32_t serial) {
+	cerr<<"SetSerial ID:"<<id<<"; serial:"<<serial<<endl;
 	Lock l(&s_domainInfoLock);
 	if (!s_domainInfo.count(d_suffix)) {
 		throw new AhuException("Can't get list of domains to set the serial.");
@@ -110,12 +121,12 @@ void TinyDNSBackend::setNotified(uint32_t id, uint32_t serial) {
 	TDIById_t& domain_index = domains.get<tag_domainid>();
 	TDIById_t::iterator itById = domain_index.find(id);
 	if (itById == domain_index.end()) {
-		L<<Logger::Error<<backendname<<"Received updated serial, but domain ID is not known in this backend."<<endl;
+		L<<Logger::Error<<backendname<<"Received updated serial("<<serial<<"), but domain ID ("<<id<<")is not known in this backend."<<endl;
 	} else {
 		DLOG(L<<Logger::Debug<<backendname<<"Setting serial for "<<itById->zone<<" to "<<serial<<endl);
-		TinyDomainInfo di = *itById;
-		di.notified_serial = serial;
+		domain_index.modify(itById, TDI_SerialModifier(serial));
 	}
+	s_domainInfo[d_suffix] = domains;
 }
 
 void TinyDNSBackend::getAllDomains(vector<DomainInfo> *domains) {

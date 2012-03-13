@@ -30,6 +30,19 @@ struct TinyDomainInfo {
 	}
 };
 
+struct TDI_SerialModifier {
+	TDI_SerialModifier (const int newSerial) : d_newSerial(newSerial) {}
+
+	void operator()(TinyDomainInfo& tdi)
+	{
+		tdi.notified_serial = d_newSerial;
+	}
+
+	private:
+		int d_newSerial;
+};
+
+
 class TinyDNSBackend : public DNSBackend
 {
 public:
