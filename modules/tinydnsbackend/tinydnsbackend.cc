@@ -40,6 +40,9 @@ vector<string> TinyDNSBackend::getLocations()
 
 	for (int i=4;i>=0;i--) {
 		char *key = (char *)malloc(i+2);
+		if (key == NULL) {
+			throw new AhuException("Couldn't allocated memory for location-search.");
+		}
 		strncpy(key, remoteAddr, i);
 		memmove(key+2, key, i);
 		key[0]='\000';
@@ -63,11 +66,13 @@ TinyDNSBackend::TinyDNSBackend(const string &suffix)
 {
 	setArgPrefix("tinydns"+suffix);
 	d_suffix = suffix;
+	d_locations = mustDo("locations");
+	d_timestamps = mustDo("timestamps");
 	d_taiepoch = 4611686018427387904ULL + getArgAsNum("tai-adjust");
 }
 
 void TinyDNSBackend::getUpdatedMasters(vector<DomainInfo>* retDomains) {
-	Lock l(&s_domainInfoLock); //TODO: We could actually lock less if we do it per suffix.
+	Lock l(&s_domainInfoLock); 
 	TDI_t *domains;
 	if (s_domainInfo.count(d_suffix)) {
 		domains = &s_domainInfo[d_suffix];
@@ -140,7 +145,7 @@ void TinyDNSBackend::getAllDomains(vector<DomainInfo> *domains) {
 			fillSOAData(rr.content, sd);
 
 			DomainInfo di;
-			di.id = -1; //TODO: Check if this is ok. 
+			di.id = -1;
 			di.backend=this;
 			di.zone = rr.qname;
 			di.serial = sd.serial;
@@ -225,22 +230,24 @@ bool TinyDNSBackend::get(DNSResourceRecord &rr)
 			char recloc[2];
 			recloc[0] = pr.get8BitInt();
 			recloc[1] = pr.get8BitInt();	
-			
-			bool foundLocation = false;
-			// IF the dnspacket is not set, we simply do not output any queries with a location.
-			vector<string> locations = getLocations();
-			while(locations.size() > 0) {
-				string locId = locations.back();
-				locations.pop_back();
+		
+			if (d_locations) {	
+				bool foundLocation = false;
+				// IF the dnspacket is not set, we simply do not output any queries with a location.
+				vector<string> locations = getLocations();
+				while(locations.size() > 0) {
+					string locId = locations.back();
+					locations.pop_back();
 
-				if (recloc[0] == locId[0] && recloc[1] == locId[1]) {
-					foundLocation = true;
-					break;
+					if (recloc[0] == locId[0] && recloc[1] == locId[1]) {
+						foundLocation = true;
+						break;
+					}
+				}
+				if (!foundLocation) {
+					continue;
 				}
 			}
-			if (!foundLocation) {
-				continue;
-			} 
 		}
 		if(d_isAxfr || d_qtype.getCode() == QType::ANY || valtype == d_qtype) {
 			// if we do an AXFR and we have a wildcard record, we need to add \001\052 before it.
@@ -261,17 +268,19 @@ bool TinyDNSBackend::get(DNSResourceRecord &rr)
 			rr.auth = true;
 
 			uint64_t timestamp = pr.get32BitInt();
-			timestamp <<= 32;
-			timestamp += pr.get32BitInt();
-			if(timestamp) {
-				uint64_t now = d_taiepoch + time(NULL);
-				if (rr.ttl == 0) {
-					if (timestamp < now) {
+			if (d_timestamps) {
+				timestamp <<= 32;
+				timestamp += pr.get32BitInt();
+				if(timestamp) {
+					uint64_t now = d_taiepoch + time(NULL);
+					if (rr.ttl == 0) {
+						if (timestamp < now) {
+							continue;
+						}
+						rr.ttl = timestamp - now; 
+					} else if (now <= timestamp) {
 						continue;
 					}
-					rr.ttl = timestamp - now; 
-				} else if (now <= timestamp) {
-					continue;
 				}
 			}
 	
@@ -308,6 +317,8 @@ public:
 	TinyDNSFactory() : BackendFactory("tinydns") {}
 
 	void declareArguments(const string &suffix="") {
+		declare(suffix, "locations", "Enable/Disable support for locations. Setting this to NO will ignore locations in the CDB file.", "yes");
+		declare(suffix, "timestamps", "Enable/Disable support for timestamps. Setting this to NO will ignore timestamps in the CDB file.", "yes");
 		declare(suffix, "notify-on-startup", "Tell the TinyDNSBackend to nofity all the nameservers on startup. Default is yes.", "yes");
 		declare(suffix, "dbfile", "Location of the cdb data file", "data.cdb");
 		declare(suffix, "tai-adjust", "This adjusts the TAI value if timestamps are used. These seconds will be added to the start point (1970) and will allow you to adjust for leap seconds. The default is 10.", "10");
