@@ -11,7 +11,24 @@
 #include <fcntl.h>
 #include "cdb.hh"
 #include <pdns/lock.hh>
+#include <boost/multi_index_container.hpp>
+#include <boost/multi_index/ordered_index.hpp>
+#include <boost/multi_index/identity.hpp>
+#include <boost/multi_index/member.hpp>
 
+using namespace ::boost;
+using namespace ::boost::multi_index;
+
+struct TinyDomainInfo {
+	uint32_t id;
+	uint32_t notified_serial;
+	string zone;
+
+	bool operator<(const TinyDomainInfo& tdi) const
+	{
+		return zone < tdi.zone;
+	}
+};
 
 class TinyDNSBackend : public DNSBackend
 {
@@ -29,6 +46,20 @@ public:
 private:
 	vector<string> getLocations();
 
+	//TypeDefs
+	struct tag_zone{};
+	struct tag_domainid{};
+	typedef multi_index_container<
+		TinyDomainInfo,
+		indexed_by<
+			ordered_unique<tag<tag_zone>, member<TinyDomainInfo, string, &TinyDomainInfo::zone> >,
+			ordered_unique<tag<tag_domainid>, member<TinyDomainInfo, uint32_t, &TinyDomainInfo::id> >
+		>
+	> TDI_t;
+	typedef map<string, TDI_t> TDI_suffix_t;
+	typedef TDI_t::index<tag_zone>::type TDIByZone_t;
+	typedef TDI_t::index<tag_domainid>::type TDIById_t;
+
 	//data member variables
 	uint64_t d_taiepoch;
 	QType d_qtype;
@@ -36,11 +67,12 @@ private:
 	DNSPacket *d_dnspacket; // used for location and edns-client support.
 	bool d_isWildcardQuery; // Indicate if the query received was a wildcard query.
 	bool d_isAxfr; // Indicate if we received a list() and not a lookup().
-	
+	string d_suffix;
 
 	// Statics
 	static pthread_mutex_t s_domainInfoLock;
-	static vector<DomainInfo> s_domainInfo;
+	static TDI_suffix_t s_domainInfo;
+	static uint32_t s_lastId; // used to give a domain an id.
 };
 
 #endif // TINYDNSBACKEND_HH 

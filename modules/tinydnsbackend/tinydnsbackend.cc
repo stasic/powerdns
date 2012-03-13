@@ -10,9 +10,10 @@
 #include <boost/foreach.hpp>
 
 
-static string backendname="[TinyDNSBackend]";
+static string backendname="[TinyDNSBackend] ";
+uint32_t TinyDNSBackend::s_lastId;
 pthread_mutex_t TinyDNSBackend::s_domainInfoLock=PTHREAD_MUTEX_INITIALIZER;
-vector<DomainInfo> TinyDNSBackend::s_domainInfo;
+TinyDNSBackend::TDI_suffix_t TinyDNSBackend::s_domainInfo;
 
 
 vector<string> TinyDNSBackend::getLocations()
@@ -61,78 +62,59 @@ vector<string> TinyDNSBackend::getLocations()
 TinyDNSBackend::TinyDNSBackend(const string &suffix)
 {
 	setArgPrefix("tinydns"+suffix);
+	d_suffix = suffix;
 	d_taiepoch = 4611686018427387904ULL + getArgAsNum("tai-adjust");
 }
 
-void TinyDNSBackend::getUpdatedMasters(vector<DomainInfo>* domains) {
-	Lock l(&s_domainInfoLock);
-	
-	if (s_domainInfo.size() == 0) {
-		bool notifyOnStartup = mustDo("notify-on-startup");
-		getAllDomains(&s_domainInfo);
-		
-		// little bit of optimization at startup.
-		if (! notifyOnStartup) {
-			return;	
+void TinyDNSBackend::getUpdatedMasters(vector<DomainInfo>* retDomains) {
+	Lock l(&s_domainInfoLock); //TODO: We could actually lock less if we do it per suffix.
+	TDI_t domains;
+	if (s_domainInfo.count(d_suffix)) {
+		domains = s_domainInfo[d_suffix];
+	} else {
+		s_domainInfo.insert(pair<string, TDI_t>(d_suffix, domains));
+	}
+
+	vector<DomainInfo> allDomains;
+	getAllDomains(&allDomains);
+	if (domains.size() == 0 && mustDo("notify-on-startup")) {
+		for (vector<DomainInfo>::iterator di=allDomains.begin(); di!=allDomains.end(); ++di) {
+			di->notified_serial = 0;
+		}
+	}
+
+	for(vector<DomainInfo>::iterator di=allDomains.begin(); di!=allDomains.end(); ++di) {
+		TDIByZone_t& zone_index = domains.get<tag_zone>();
+		TDIByZone_t::iterator itByZone = zone_index.find(di->zone);
+		if (itByZone == zone_index.end()) {
+			retDomains->push_back(*di);
+			TinyDomainInfo tmp;
+			tmp.zone = di->zone;
+			tmp.id = s_lastId++;
+			tmp.notified_serial = di->serial;
+			domains.insert(tmp);
 		} else {
-			for(vector<DomainInfo>::iterator di=s_domainInfo.begin(); di!=s_domainInfo.end(); ++di) {
-				di->notified_serial = 0;
+			if (itByZone->notified_serial < di->serial) {
+				retDomains->push_back(*di);
 			}
 		}
-	}
-
-	vector<DomainInfo> freshDomains; 
-	getAllDomains(&freshDomains);
-
-	bool found = false;
-	BOOST_FOREACH(DomainInfo freshDi, freshDomains) {
-		found = false;
-		for(vector<DomainInfo>::iterator di=s_domainInfo.begin(); di!=s_domainInfo.end(); ++di) {
-			if (di->zone.compare(freshDi.zone) == 0) {
-				found=true;
-				if (di->notified_serial != freshDi.serial) {
-					DLOG(L<<Logger::Debug<<backendname<<"Adding "<<di->zone<<". New serial:"<<freshDi.serial<<";Notified_serial:"<<di->notified_serial<<endl);
-					di->serial = freshDi.serial;
-					domains->push_back(*di);
-					break;
-				}
-			}
-		}
-		if (!found) {
-			DLOG(L<<Logger::Info<<backendname<<"Found new domain while checking if we have updated serials: "<<freshDi.zone<<endl);
-			s_domainInfo.push_back(freshDi);
-			domains->push_back(freshDi);
-		}
-	}
-
-	int remItem = 0;
-	set<uint32_t> removeItems;
-	for(vector<DomainInfo>::iterator di=s_domainInfo.begin(); di!=s_domainInfo.end(); ++di) {
-		found = false;
-		BOOST_FOREACH(DomainInfo freshDi, freshDomains) {
-			if (di->zone.compare(freshDi.zone) == 0) {
-				found = true;
-				break;
-			}
-		}
-		if (!found) {
-			removeItems.insert(remItem);
-			DLOG(L<<Logger::Info<<backendname<<"Did not find zone "<<di->zone<<" while doing updated serials check. Removing!"<<endl);
-		}
-		remItem++;
-	}
-	BOOST_FOREACH(uint32_t rem, removeItems) {
-		s_domainInfo.erase(s_domainInfo.begin() + rem);
 	}
 }
 
 void TinyDNSBackend::setNotified(uint32_t id, uint32_t serial) {
 	Lock l(&s_domainInfoLock);
-	for(vector<DomainInfo>::iterator di=s_domainInfo.begin(); di!=s_domainInfo.end(); ++di) {
-		if (di->id == id) {
-			DLOG(L<<Logger::Debug<<backendname<<"Setting serial for "<<di->zone<<" to "<<serial<<endl);
-			di->notified_serial = serial;
-		}
+	if (!s_domainInfo.count(d_suffix)) {
+		throw new AhuException("Can't get list of domains to set the serial.");
+	}
+	TDI_t domains = s_domainInfo[d_suffix];
+	TDIById_t& domain_index = domains.get<tag_domainid>();
+	TDIById_t::iterator itById = domain_index.find(id);
+	if (itById == domain_index.end()) {
+		L<<Logger::Error<<backendname<<"Received updated serial, but domain ID is not known in this backend."<<endl;
+	} else {
+		DLOG(L<<Logger::Debug<<backendname<<"Setting serial for "<<itById->zone<<" to "<<serial<<endl);
+		TinyDomainInfo di = *itById;
+		di.notified_serial = serial;
 	}
 }
 
@@ -143,15 +125,13 @@ void TinyDNSBackend::getAllDomains(vector<DomainInfo> *domains) {
 	d_cdbReader->searchAll();
 	DNSResourceRecord rr;
 
-	int i = 1;
 	while (get(rr)) {
-		i++;
 		if (rr.qtype.getCode() == QType::SOA) {
 			SOAData sd;
 			fillSOAData(rr.content, sd);
 
 			DomainInfo di;
-			di.id = i++;
+			di.id = -1; //TODO: Check if this is ok. 
 			di.backend=this;
 			di.zone = rr.qname;
 			di.serial = sd.serial;
@@ -302,7 +282,7 @@ bool TinyDNSBackend::get(DNSResourceRecord &rr)
 			} else {
 				rr.content = content;
 			}
-			DLOG(L<<Logger::Debug<<backendname<<" Returning ["<<rr.content<<"] for ["<<rr.qname<<"] of RecordType ["<<rr.qtype.getName()<<"]"<<endl;);
+			DLOG(L<<Logger::Debug<<backendname<<"Returning ["<<rr.content<<"] for ["<<rr.qname<<"] of RecordType ["<<rr.qtype.getName()<<"]"<<endl;);
 			return true;
 		}
 	} // end of while
