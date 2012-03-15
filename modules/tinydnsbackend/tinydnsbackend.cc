@@ -25,33 +25,26 @@ vector<string> TinyDNSBackend::getLocations()
 	}
 
 	//TODO: We do not have IPv6 support.
-	if (d_dnspacket->getRealRemote().getBits() != 32) {
+	Netmask remote = d_dnspacket->getRealRemote();
+	if (remote.getBits() != 32) {
 		return ret;
 	}
 	
-	Netmask remote = d_dnspacket->getRealRemote();
 	unsigned long addr = remote.getNetwork().sin4.sin_addr.s_addr;	
 
-	char remoteAddr[4];
-	remoteAddr[0] = (addr      )&0xff;
-	remoteAddr[1] = (addr >>  8)&0xff;
-	remoteAddr[2] = (addr >> 16)&0xff;
-	remoteAddr[3] = (addr >> 24)&0xff;
+	char key[6];
+	key[0] = '\000';
+	key[1] = '\045';
+	key[2] = (addr      )&0xff;
+	key[3] = (addr >>  8)&0xff;
+	key[4] = (addr >> 16)&0xff;
+	key[5] = (addr >> 24)&0xff;
 
 	for (int i=4;i>=0;i--) {
-		char *key = (char *)malloc(i+2);
-		if (key == NULL) {
-			throw new AhuException("Couldn't allocated memory for location-search.");
-		}
-		strncpy(key, remoteAddr, i);
-		memmove(key+2, key, i);
-		key[0]='\000';
-		key[1]='\045';
 		string searchkey(key, i+2);
 		CDB *reader = new CDB(getArg("dbfile"));
 		ret = reader->findall(searchkey);
 		delete reader;
-		free(key);
 
 		//Biggest item wins, so when we find something, we can jump out.
 		if (ret.size() > 0) {
@@ -67,18 +60,18 @@ TinyDNSBackend::TinyDNSBackend(const string &suffix)
 	setArgPrefix("tinydns"+suffix);
 	d_suffix = suffix;
 	d_locations = mustDo("locations");
-	d_timestamps = mustDo("timestamps");
 	d_taiepoch = 4611686018427387904ULL + getArgAsNum("tai-adjust");
 }
 
 void TinyDNSBackend::getUpdatedMasters(vector<DomainInfo>* retDomains) {
-	Lock l(&s_domainInfoLock); 
+	Lock l(&s_domainInfoLock); //TODO: We could actually lock less if we do it per suffix.
+	
 	TDI_t *domains;
-	if (s_domainInfo.count(d_suffix)) {
-		domains = &s_domainInfo[d_suffix];
-	} else {
-		domains = new TDI_t; 
-	}
+	if (! s_domainInfo.count(d_suffix)) {
+		domains = new TDI_t;
+		s_domainInfo[d_suffix] = *domains;
+	} 
+	domains = &s_domainInfo[d_suffix];
 
 	vector<DomainInfo> allDomains;
 	getAllDomains(&allDomains);
@@ -111,8 +104,6 @@ void TinyDNSBackend::getUpdatedMasters(vector<DomainInfo>* retDomains) {
 			}
 		}
 	}
-
-	s_domainInfo[d_suffix] = *domains;
 }
 
 void TinyDNSBackend::setNotified(uint32_t id, uint32_t serial) {
@@ -134,6 +125,7 @@ void TinyDNSBackend::setNotified(uint32_t id, uint32_t serial) {
 
 void TinyDNSBackend::getAllDomains(vector<DomainInfo> *domains) {
 	d_isAxfr=true;
+	d_dnspacket = NULL;
 
 	d_cdbReader=new CDB(getArg("dbfile"));
 	d_cdbReader->searchAll();
@@ -145,7 +137,7 @@ void TinyDNSBackend::getAllDomains(vector<DomainInfo> *domains) {
 			fillSOAData(rr.content, sd);
 
 			DomainInfo di;
-			di.id = -1;
+			di.id = -1; //TODO: Check if this is ok. 
 			di.backend=this;
 			di.zone = rr.qname;
 			di.serial = sd.serial;
@@ -199,6 +191,9 @@ bool TinyDNSBackend::get(DNSResourceRecord &rr)
 
 		//DLOG(L<<Logger::Debug<<"[GET] Key: "<<makeHexDump(key)<<endl);
 		//DLOG(L<<Logger::Debug<<"[GET] Val: "<<makeHexDump(val)<<endl);
+		if (key[0] == '\000' && key[1] == '\045') { // skip locations
+			continue;
+		}
 
 		if (!d_isAxfr) {
 			// If we have a wildcard query, but the record we got is not a wildcard, we skip.
@@ -213,32 +208,30 @@ bool TinyDNSBackend::get(DNSResourceRecord &rr)
 		}
 		
 
-		QType valtype;
 		vector<uint8_t> bytes;
 		const char *sval = val.c_str();
 		unsigned int len = val.size();
 		bytes.resize(len);
 		copy(sval, sval+len, bytes.begin());
 		PacketReader pr(bytes);
-		valtype = QType(pr.get16BitInt());
-		//DLOG(L<<Logger::Debug<<"[GET] ValType:"<<valtype.getName()<<endl);
-		//DLOG(L<<Logger::Debug<<"[GET] QType:"<<d_qtype.getName()<<endl);
-		char locwild = pr.get8BitInt();
+		rr.qtype = QType(pr.get16BitInt());
 
-		if(locwild != '\075' && (locwild == '\076' || locwild == '\053')) 
-		{
+		char locwild = pr.get8BitInt();
+		if(locwild != '\075' && (locwild == '\076' || locwild == '\053')) {
+			if (d_isAxfr && d_locations) { // We skip records with a location in AXFR, unless we disable locations.
+				continue;
+			}
 			char recloc[2];
 			recloc[0] = pr.get8BitInt();
-			recloc[1] = pr.get8BitInt();	
-		
-			if (d_locations) {	
+			recloc[1] = pr.get8BitInt();
+			
+			if (d_locations) {
 				bool foundLocation = false;
-				// IF the dnspacket is not set, we simply do not output any queries with a location.
 				vector<string> locations = getLocations();
 				while(locations.size() > 0) {
 					string locId = locations.back();
 					locations.pop_back();
-
+	
 					if (recloc[0] == locId[0] && recloc[1] == locId[1]) {
 						foundLocation = true;
 						break;
@@ -246,47 +239,43 @@ bool TinyDNSBackend::get(DNSResourceRecord &rr)
 				}
 				if (!foundLocation) {
 					continue;
-				}
+				} 
 			}
 		}
-		if(d_isAxfr || d_qtype.getCode() == QType::ANY || valtype == d_qtype) {
-			// if we do an AXFR and we have a wildcard record, we need to add \001\052 before it.
-			if (d_isAxfr && (val[2] == '\052' || val[2] == '\053' )) {
+
+		if(d_isAxfr || d_qtype.getCode() == QType::ANY || rr.qtype == d_qtype) {
+			
+			if (d_isAxfr && (val[2] == '\052' || val[2] == '\053' )) { // Keys are not stored with wildcard character, with AXFR we need to add that.
 				key.insert(0, 1, '\052');
 				key.insert(0, 1, '\001');
 			}
 			DNSLabel dnsKey(key.c_str(), key.size());
 			rr.qname = dnsKey.human();
-			// strip of the . (dot) at the end, if we don't packethandler does not handle this correctly.
-			rr.qname = rr.qname.erase(rr.qname.size()-1, 1);
-			rr.qtype = valtype;
-			rr.ttl = pr.get32BitInt();
-			
+			rr.qname = rr.qname.erase(rr.qname.size()-1, 1);// strip the last dot, packethandler needs this.
 			rr.domain_id=-1;
-			//TODO: 11:13.21 <@ahu> IT IS ALWAYS AUTH --- well not really because we are just a backend :-)
+			// 11:13.21 <@ahu> IT IS ALWAYS AUTH --- well not really because we are just a backend :-)
 			// We could actually do NSEC3-NARROW DNSSEC according to Habbie, if we do, we need to change something ehre. 
 			rr.auth = true;
 
+			rr.ttl = pr.get32BitInt();
 			uint64_t timestamp = pr.get32BitInt();
-			if (d_timestamps) {
-				timestamp <<= 32;
-				timestamp += pr.get32BitInt();
-				if(timestamp) {
-					uint64_t now = d_taiepoch + time(NULL);
-					if (rr.ttl == 0) {
-						if (timestamp < now) {
-							continue;
-						}
-						rr.ttl = timestamp - now; 
-					} else if (now <= timestamp) {
+			timestamp <<= 32;
+			timestamp += pr.get32BitInt();
+			if(timestamp) {
+				uint64_t now = d_taiepoch + time(NULL);
+				if (rr.ttl == 0) {
+					if (timestamp < now) {
 						continue;
 					}
+					rr.ttl = timestamp - now; 
+				} else if (now <= timestamp) {
+					continue;
 				}
 			}
 	
 			DNSRecord dr;
 			dr.d_class = 1;
-			dr.d_type = valtype.getCode();
+			dr.d_type = rr.qtype.getCode();
 			dr.d_clen = val.size()-pr.d_pos;
 			DNSRecordContent *drc = DNSRecordContent::mastermake(dr, pr);
 
@@ -300,7 +289,7 @@ bool TinyDNSBackend::get(DNSResourceRecord &rr)
 			} else {
 				rr.content = content;
 			}
-			DLOG(L<<Logger::Debug<<backendname<<"Returning ["<<rr.content<<"] for ["<<rr.qname<<"] of RecordType ["<<rr.qtype.getName()<<"]"<<endl;);
+			//DLOG(L<<Logger::Debug<<backendname<<"Returning ["<<rr.content<<"] for ["<<rr.qname<<"] of RecordType ["<<rr.qtype.getName()<<"]"<<endl;);
 			return true;
 		}
 	} // end of while
@@ -317,11 +306,10 @@ public:
 	TinyDNSFactory() : BackendFactory("tinydns") {}
 
 	void declareArguments(const string &suffix="") {
-		declare(suffix, "locations", "Enable/Disable support for locations. Setting this to NO will ignore locations in the CDB file.", "yes");
-		declare(suffix, "timestamps", "Enable/Disable support for timestamps. Setting this to NO will ignore timestamps in the CDB file.", "yes");
 		declare(suffix, "notify-on-startup", "Tell the TinyDNSBackend to nofity all the nameservers on startup. Default is yes.", "yes");
 		declare(suffix, "dbfile", "Location of the cdb data file", "data.cdb");
 		declare(suffix, "tai-adjust", "This adjusts the TAI value if timestamps are used. These seconds will be added to the start point (1970) and will allow you to adjust for leap seconds. The default is 10.", "10");
+		declare(suffix, "locations", "Enable or Disable location support in the backend. Changing the value to 'no' will make the backend ignore the locations. This then returns all records!", "yes");
 	}
 
 

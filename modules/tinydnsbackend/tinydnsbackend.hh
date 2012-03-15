@@ -12,8 +12,7 @@
 #include "cdb.hh"
 #include <pdns/lock.hh>
 #include <boost/multi_index_container.hpp>
-#include <boost/multi_index/ordered_index.hpp>
-#include <boost/multi_index/identity.hpp>
+#include <boost/multi_index/hashed_index.hpp>
 #include <boost/multi_index/member.hpp>
 
 using namespace ::boost;
@@ -65,8 +64,8 @@ private:
 	typedef multi_index_container<
 		TinyDomainInfo,
 		indexed_by<
-			ordered_unique<tag<tag_zone>, member<TinyDomainInfo, string, &TinyDomainInfo::zone> >,
-			ordered_unique<tag<tag_domainid>, member<TinyDomainInfo, uint32_t, &TinyDomainInfo::id> >
+			hashed_unique<tag<tag_zone>, member<TinyDomainInfo, string, &TinyDomainInfo::zone> >,
+			hashed_unique<tag<tag_domainid>, member<TinyDomainInfo, uint32_t, &TinyDomainInfo::id> >
 		>
 	> TDI_t;
 	typedef map<string, TDI_t> TDI_suffix_t;
