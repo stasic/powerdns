@@ -17148,6 +17148,7 @@ VALUES (:zoneid, :ip)
      	      <row><entry>Superslave</entry><entry>No</entry></row>
      	      <row><entry>Autoserial</entry><entry>No</entry></row>
      	      <row><entry>DNSSEC</entry><entry>No</entry></row>
+            <row><entry>Multiple instances</entry><entry>Yes</entry></row>
           </tbody>
      	  </tgroup>
      	</table>
@@ -17183,35 +17184,44 @@ These seconds will be added to the start point (1970) and will allow you to adju
                 <para>Tell the TinyDNSBackend to notify all the slave nameservers on startup. This might cause broadcast storms. Default is no.</para>
               </listitem>
             </varlistentry>
+             <varlistentry>
+              <term>tinydns-locations</term>
+              <listitem>
+                <para>Enable or Disable location support in the backend. Changing the value to 'no' will make the backend ignore the locations. This then returns all records. When the setting is changed to 'no' an AXFR will also return all the records. With the setting on 'yes' an AXFR will only return records without a location.</para>
+              </listitem>
+            </varlistentry>
           </variablelist>
         </para>
       </sect2>
       <sect2 id="tinydnsbackend-features"><title>Location and Timestamp support</title>
         <para>
-The TinyDNS backend has support for location and timestamp. The behaviour should not be different from tinydns.
-PowerDNS has packetcache and querycache. Therefor it is needed to lower the <command>cache-ttl</command> to 0 for 
-correct operation with location support. Timestamp support is impacted by <command>cache-ttl</command> and 
-<command>query-cache-ttl</command>, as the packetcache is not TTL aware, which means that it responds with the same
-TTL until it queries the backend again. The query-cache might detect the same query and not call the backend code 
-that re-calculates the TTL value for the given timestamp.
-Please note that <command>cache-ttl</command> is a performance related setting. 
-See <xref linkend="performance-settings" />. Location support only exists for IPv4.
+Both timestamp and location are supported in the backend. Locations support can be changed using the <command>tinydns-locations</command> setting.
+Timestamp and location only work as expected when <command>cache-ttl</command> and <command>query-cache-ttl</command> are set to 0 
+(which disables these caches). Timestamp can operate with <command>cache-ttl</command> if cache is needed, but the TTL returned for the 
+timestamped racked will not be totally correct. The record will expire once the cache is expired and the backend is queried again. 
+Please note that <command>cache-ttl</command> is a performance related setting. See <xref linkend="performance-settings" />.
+Location support only exists for IPv4!
         </para>
       </sect2>
 
       <sect2 id="tinydnsbackend-master-mode"><title>Master mode</title>
         <para>
 The TinyDNSBackend supports master mode. This allows it to notify slave nameservers of updates to a zone.
-You simply need to rewrite the data.cdb file with a different serial for a zone and PowerDNS will notify the nameservers 
+You simply need to rewrite the data.cdb file with an updated/increased serial and PowerDNS will notify the slave nameservers 
 of that domain. The <command>tinydns-notify-on-startup</command> configuration setting tells the backend if it should 
 notify all the slave nameservers just after startup.
         </para>
         <para>
-The CDB datafile does not allow PowerDNS to easily query for newly added domains or updated serial numbers. 
+The CDB datafile does not allow PowerDNS to easily query for newly added domains or updated serial numbers.
 The CDB datafile requires us to do a full scan of all the records. When running with verbose logging, this could 
 lead to a lot of output. The scanning of the CDB file may also take a while on systems with large files. The scan happens 
 at an interval set by the <command>slave-cycle-interval</command>. It might be useful to raise
 this value to limit the amount of scans on the CDB file.
+        </para>
+        <para>
+The TinyDNSBackend also keeps a list of all the zones. This is needed to detect an updated serial and to give
+every zone a unique id. The list is updated when a zone is added, but not when a zone is removed. This leads to some
+memory loss.
         </para>
       </sect2>
       <sect2 id="tinydnsbackend-implementation-notes"><title>Useful implementation notes</title>
