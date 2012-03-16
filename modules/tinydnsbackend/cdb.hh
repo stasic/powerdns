@@ -22,6 +22,7 @@ public:
 	vector<string> findall(string &key);
 
 private:
+	int d_fd;
 	bool moveToNext();
 	struct cdb d_cdb;
 	struct cdb_find d_cdbf;

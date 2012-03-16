@@ -8,14 +8,14 @@
 CDB::CDB(const string &cdbfile)
 {
 	
-	int fd = open(cdbfile.c_str(), O_RDONLY);
-	if (fd < 0)
+	d_fd = open(cdbfile.c_str(), O_RDONLY);
+	if (d_fd < 0)
 	{
 		L<<Logger::Error<<"Failed to open cdb database file '"<<cdbfile<<"'. Error: "<<stringerror()<<endl;
 		throw new AhuException("Failed to open cdb database file '"+cdbfile+"'. Error: " + stringerror());
 	}
 
-	int cdbinit = cdb_init(&d_cdb, fd);
+	int cdbinit = cdb_init(&d_cdb, d_fd);
 	if (cdbinit < 0) 
 	{
 		L<<Logger::Error<<"Failed to initialize cdb structure. ErrorNr: '"<<cdbinit<<endl;
@@ -25,7 +25,7 @@ CDB::CDB(const string &cdbfile)
 
 CDB::~CDB() {
 	cdb_free(&d_cdb);
-	close(cdb_fileno(&d_cdb));
+	close(d_fd);
 }
 
 int CDB::searchKey(const string &key) {
