@@ -18,8 +18,8 @@ CDB::CDB(const string &cdbfile)
 	int cdbinit = cdb_init(&d_cdb, fd);
 	if (cdbinit < 0) 
 	{
-		L<<Logger::Error<<"Failed to initialize cdb database. ErrorNr: '"<<cdbinit<<endl;
-		throw new AhuException("Failed to initialize cdb database.");
+		L<<Logger::Error<<"Failed to initialize cdb structure. ErrorNr: '"<<cdbinit<<endl;
+		throw new AhuException("Failed to initialize cdb structure.");
 	}
 }
 
