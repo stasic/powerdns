@@ -301,6 +301,9 @@ do
 				[AC_DEFINE([HAVE_LIBOPENDBX], 1, [Have -lopendbx]) LIBOPENDBX="opendbx"]
 			)
 		;;
+		tinydns)
+			needcdb=yes
+		;;
 	esac
 done
 
@@ -497,6 +500,14 @@ then
         AC_SUBST(SQLITE3_LIBS)
         AC_SUBST(SQLITE3_CFLAGS)
 fi
+
+if test "$needcdb"
+then
+	PKG_CHECK_MODULES(CDB, libcdb, HAVE_CDB=yes, AC_MSG_ERROR([+Could not find libcdb/tinycdb]))
+        AC_SUBST(CDB_LIBS)
+        AC_SUBST(CDB_CFLAGS)
+fi
+
 
 if test "$needunixodbc"
 then
