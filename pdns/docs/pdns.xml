@@ -17134,7 +17134,7 @@ VALUES (:zoneid, :ip)
       <para>
         <warning>
 	        <para>
-            The TinyDNS Backend is available since PowerDNS Authoritative Server 3.X (TODO). This backend is marked as EXPERIMENTAL!
+            The TinyDNS Backend is available since PowerDNS Authoritative Server 3.1. This backend is marked as experimental!
 	        </para>
 	      </warning>
       </para>
@@ -17155,7 +17155,7 @@ VALUES (:zoneid, :ip)
 The TinyDNS backend allows you to use <ulink url="http://cr.yp.to/djbdns.html">djbdns's</ulink> data.cdb file format as
 the storage of your DNS records. The data.cdb file is created using 
 <ulink url="http://cr.yp.to/djbdns/tinydns-data.html">tinydns-data</ulink>. The backend is designed to be able to use 
-the data.cdb files that tinydns uses without any changes to the file.
+the data.cdb files without any changes.
       </para>
      <sect2 id="tinydnsbackend-parameters"><title>Configuration Parameters</title>
         <para>
@@ -17180,7 +17180,7 @@ These seconds will be added to the start point (1970) and will allow you to adju
             <varlistentry>
               <term>tinydns-notify-on-startup</term>
               <listitem>
-                <para>Tell the TinyDNSBackend to nofity all the nameservers on startup. Default is yes.</para>
+                <para>Tell the TinyDNSBackend to notify all the slave nameservers on startup. This might cause broadcast storms. Default is no.</para>
               </listitem>
             </varlistentry>
           </variablelist>

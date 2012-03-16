@@ -306,7 +306,7 @@ public:
 	TinyDNSFactory() : BackendFactory("tinydns") {}
 
 	void declareArguments(const string &suffix="") {
-		declare(suffix, "notify-on-startup", "Tell the TinyDNSBackend to nofity all the nameservers on startup. Default is yes.", "yes");
+		declare(suffix, "notify-on-startup", "Tell the TinyDNSBackend to notify all the slave nameservers on startup. Default is no.", "no");
 		declare(suffix, "dbfile", "Location of the cdb data file", "data.cdb");
 		declare(suffix, "tai-adjust", "This adjusts the TAI value if timestamps are used. These seconds will be added to the start point (1970) and will allow you to adjust for leap seconds. The default is 10.", "10");
 		declare(suffix, "locations", "Enable or Disable location support in the backend. Changing the value to 'no' will make the backend ignore the locations. This then returns all records!", "yes");
