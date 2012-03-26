@@ -172,8 +172,13 @@ vector<DNSBackend *>BackendMakerClass::all(bool metadataOnly, const string &pref
   try {
     for(vector<pair<string,string> >::const_iterator i=d_instances.begin();i!=d_instances.end();++i) {
       DNSBackend *made;
-      L<<Logger::Warning<<"first="<<i->first<<" second="<<i->second<<endl;
-      if((prefix == "nest" && i->second.find("-nest/")==0) || (prefix != "nest" && i->second.find("-nest/")!=0))
+      L<<Logger::Warning<<"first="<<i->first<<" second="<<i->second<<" prefix="<<prefix<<endl;
+      if(i->first+i->second == prefix)
+      {
+        // failsafe during dev!
+        continue;
+      }
+      if((prefix == "" && i->second.find("/") == i->second.npos) || (i->second.find("-"+prefix+"/") == 0))
       {
         if(metadataOnly)
           made = d_repository[i->first]->makeMetadataOnly(i->second);

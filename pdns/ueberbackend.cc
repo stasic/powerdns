@@ -436,7 +436,7 @@ void UeberBackend::lookup(const QType &qtype,const string &qname, DNSPacket *pkt
     if(cstat<0) { // nothing
       d_negcached=d_cached=false;
       d_answers.clear(); 
-      DLOG(L<<"asking backend i="<<d_handle.i<<endl);
+      DLOG(L<<"asking backend i="<<d_handle.i<<" (our prefix="<<d_prefix<<") (their prefix="<<(backends[d_handle.i]->d_prefix)<<")"<<endl);
       try {
         (d_handle.d_hinterBackend=backends[d_handle.i++])->lookup(qtype, qname,pkt_p,zoneId);
       }
@@ -564,7 +564,7 @@ public:
   // }
   DNSBackend *make(const string &suffix="")
   {
-    L<<Logger::Warning<<"launchin nest ("<<suffix<<")!"<<endl;
+    L<<Logger::Warning<<"launching nest ("<<suffix<<")!"<<endl;
     return new UeberBackend("default", true, suffix);
   }
 };
