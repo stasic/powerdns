@@ -67,6 +67,7 @@ private:
   QType d_qtype;
   int d_count;
   SSql *d_db;
+  bool d_lookupSuccess;
   SSql::result_t d_result;
 
   string d_wildCardNoIDQuery;

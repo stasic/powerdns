@@ -733,9 +733,11 @@ void GSQLBackend::lookup(const QType &qtype,const string &qname, DNSPacket *pkt_
 
   try {
     d_db->doQuery(output);
+    d_lookupSuccess=true;
   }
   catch(SSqlException &e) {
-    throw AhuException(e.txtReason());
+    DLOG(L<<"would have thrown "<<e.txtReason()<<endl);
+    d_lookupSuccess=false;
   }
 
   d_qname=qname;
@@ -847,7 +849,7 @@ bool GSQLBackend::get(DNSResourceRecord &r)
 {
   // L << "GSQLBackend get() was called for "<<qtype.getName() << " record: ";
   SSql::row_t row;
-  if(d_db->getRow(row)) {
+  if(d_lookupSuccess && d_db->getRow(row)) {
     r.content=row[0];
     if (row[1].empty())
         r.ttl = ::arg().asNum( "default-ttl" );
