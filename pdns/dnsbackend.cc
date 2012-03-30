@@ -163,7 +163,7 @@ int BackendMakerClass::numLauncheable()
   return d_instances.size();
 }
 
-vector<DNSBackend *>BackendMakerClass::all(bool metadataOnly)
+vector<DNSBackend *>BackendMakerClass::all(bool metadataOnly, const string &prefix)
 {
   vector<DNSBackend *>ret;
   if(d_instances.empty())
@@ -172,14 +172,18 @@ vector<DNSBackend *>BackendMakerClass::all(bool metadataOnly)
   try {
     for(vector<pair<string,string> >::const_iterator i=d_instances.begin();i!=d_instances.end();++i) {
       DNSBackend *made;
-      if(metadataOnly)
-        made = d_repository[i->first]->makeMetadataOnly(i->second);
-      else 
-        made = d_repository[i->first]->make(i->second);
-      if(!made)
-        throw AhuException("Unable to launch backend '"+i->first+"'");
-
-      ret.push_back(made);
+      L<<Logger::Warning<<"first="<<i->first<<" second="<<i->second<<endl;
+      if((prefix == "nest" && i->second.find("-nest/")==0) || (prefix != "nest" && i->second.find("-nest/")!=0))
+      {
+        if(metadataOnly)
+          made = d_repository[i->first]->makeMetadataOnly(i->second);
+        else 
+          made = d_repository[i->first]->make(i->second);
+        if(!made)
+          throw AhuException("Unable to launch backend '"+i->first+"'");
+        L<<Logger::Warning<<"in BackendMakers::all, prefix=["<<prefix<<"] d_prefix=["<<made->d_prefix<<"]"<<endl;
+        ret.push_back(made);
+      }
     }
   }
   catch(AhuException &ae) {

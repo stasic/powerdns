@@ -42,6 +42,7 @@
 #include "logger.hh"
 #include "statbag.hh"
 #include <boost/serialization/vector.hpp>
+#include "pdns/backends/gsql/ssql.hh"
 
 
 extern StatBag S;
@@ -73,7 +74,7 @@ bool UeberBackend::loadmodule(const string &name)
   if(dlib == NULL) {
     L<<Logger::Warning <<"Unable to load module '"<<name<<"': "<<dlerror() << endl; 
     if(name.find("gsqlite3")!=string::npos)
-      L<<Logger::Warning <<"Trying to load gsqlite3backend? Make sure pdns_server was compiled with sqlite3!" <<endl;
+    L<<Logger::Warning <<"Trying to load gsqlite3backend? Make sure pdns_server was compiled with sqlite3!" <<endl;
     return false;
   }
   
@@ -219,6 +220,7 @@ void UeberBackend::getUpdatedMasters(vector<DomainInfo>* domains)
 /** special trick - if sd.db is set to -1, the cache is ignored */
 bool UeberBackend::getSOA(const string &domain, SOAData &sd, DNSPacket *p)
 {
+  cerr<<"getSOA "<<domain<<", nest="<<d_nest<<endl;
   d_question.qtype=QType::SOA;
   d_question.qname=domain;
   d_question.zoneId=-1;
@@ -236,8 +238,9 @@ bool UeberBackend::getSOA(const string &domain, SOAData &sd, DNSPacket *p)
       return true;
     }
   }
-    
-  for(vector<DNSBackend *>::const_iterator i=backends.begin();i!=backends.end();++i)
+  cerr<<"backendcount: "<<backends.size()<<endl;
+  for(vector<DNSBackend *>::const_iterator i=backends.begin();i!=backends.end();++i) {
+    cerr<<"nest="<<d_nest<<", asking backend "<<((*i)->d_prefix)<<endl;
     if((*i)->getSOA(domain, sd, p)) {
       DNSResourceRecord rr;
       rr.qname=domain;
@@ -250,6 +253,7 @@ bool UeberBackend::getSOA(const string &domain, SOAData &sd, DNSPacket *p)
       addCache(d_question, rrs);
       return true;
     }
+  }
 
   addNegCache(d_question); 
   return false;
@@ -269,7 +273,7 @@ void UeberBackend::setStatus(const string &st)
   s_status=st;
 }
 
-UeberBackend::UeberBackend(const string &pname)
+UeberBackend::UeberBackend(const string &pname, bool nest, const string &suffix)
 {
   pthread_mutex_lock(&instances_lock);
   instances.push_back(this); // report to the static list of ourself
@@ -278,7 +282,17 @@ UeberBackend::UeberBackend(const string &pname)
   tid=pthread_self(); 
   stale=false;
 
-  backends=BackendMakers().all(pname=="key-only");
+  d_nest=nest;
+
+  if(nest)
+  {
+    setArgPrefix("nest"+suffix);
+    backends=BackendMakers().all(pname=="key-only", "nest"+suffix);
+  }
+  else
+  {
+    backends=BackendMakers().all(pname=="key-only");
+  }
 }
 
 void UeberBackend::die()
@@ -422,7 +436,16 @@ void UeberBackend::lookup(const QType &qtype,const string &qname, DNSPacket *pkt
     if(cstat<0) { // nothing
       d_negcached=d_cached=false;
       d_answers.clear(); 
-      (d_handle.d_hinterBackend=backends[d_handle.i++])->lookup(qtype, qname,pkt_p,zoneId);
+      DLOG(L<<"asking backend i="<<d_handle.i<<endl);
+      try {
+        (d_handle.d_hinterBackend=backends[d_handle.i++])->lookup(qtype, qname,pkt_p,zoneId);
+      }
+      catch(SSqlException &e) {
+        throw AhuException(e.txtReason()+" (SSqlException inside UB::lookup)");
+      }
+      catch(AhuException &e) {
+        throw AhuException(e.reason+" (AhuException inside UB::lookup)");
+      }
     } 
     else if(cstat==0) {
       d_negcached=true;
@@ -497,19 +520,29 @@ bool UeberBackend::handle::get(DNSResourceRecord &r)
 {
   DLOG(L << "Ueber get() was called for a "<<qtype.getName()<<" record" << endl);
   bool isMore=false;
-  while(d_hinterBackend && !(isMore=d_hinterBackend->get(r))) { // this backend out of answers
-    if(i<parent->backends.size()) {
-      DLOG(L<<"Backend #"<<i<<" of "<<parent->backends.size()
-           <<" out of answers, taking next"<<endl);
-      
-      d_hinterBackend=parent->backends[i++];
+  try
+  {
+    while(d_hinterBackend && !(isMore=d_hinterBackend->get(r))) { // this backend out of answers
+      if(i<parent->backends.size()) {
+        DLOG(L<<"Backend #"<<i<<" of "<<parent->backends.size()
+             <<" out of answers, taking next"<<endl);
+        
+        d_hinterBackend=parent->backends[i++];
       d_hinterBackend->lookup(qtype,qname,pkt_p,parent->domain_id);
-    }
-    else 
-      break;
+      }
+      else 
+        break;
 
-    DLOG(L<<"Now asking backend #"<<i<<endl);
+      DLOG(L<<"Now asking backend #"<<i<<endl);
+    }
   }
+  catch(SSqlException &e) {
+    throw AhuException(e.txtReason()+" (SSqlException inside UB::lookup)");
+  }
+  catch(AhuException &e) {
+    throw AhuException(e.reason+" (AhuException inside UB::lookup)");
+  }
+
 
   if(!isMore && i==parent->backends.size()) {
     DLOG(L<<"UeberBackend reached end of backends"<<endl);
@@ -520,3 +553,31 @@ bool UeberBackend::handle::get(DNSResourceRecord &r)
   i=parent->backends.size(); // don't go on to the next backend
   return true;
 }
+
+class NestFactory : public BackendFactory
+{
+public:
+  NestFactory() : BackendFactory("nest") {}
+  // void declareArguments(const string &suffix="")
+  // {
+  //   // declare(suffix,"hostname","Hostname which is to be random","random.example.com");
+  // }
+  DNSBackend *make(const string &suffix="")
+  {
+    L<<Logger::Warning<<"launchin nest ("<<suffix<<")!"<<endl;
+    return new UeberBackend("default", true, suffix);
+  }
+};
+
+class NestLoader
+{
+public:
+  NestLoader()
+  {
+    BackendMakers().report(new NestFactory);
+    
+    L<<Logger::Info<<" [NestBackend] This is the nestbackend reporting"<<endl;
+  }  
+};
+
+static NestLoader nestLoader;

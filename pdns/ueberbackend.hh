@@ -54,7 +54,7 @@ class BackendReporter;
 class UeberBackend : public DNSBackend, public boost::noncopyable
 {
 public:
-  UeberBackend(const string &pname="default");
+  UeberBackend(const string &pname="default", bool nest=false, const string &suffix="");
   ~UeberBackend();
   typedef DNSBackend *BackendMaker(); //!< typedef for functions returning pointers to new backends
 
@@ -164,10 +164,12 @@ private:
   static int s_s;
   static string s_status; 
   int d_ancount;
+  bool d_nest;
   
   bool stale;
   int domain_id;
 };
+
 
 
 /** Class used to report new backends. It stores a maker function, and a flag that indicates that 
