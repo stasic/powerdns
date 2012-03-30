@@ -17,7 +17,7 @@ public:
          unsigned int timeout=10);
 
   ~SMySQL();
-  
+
   SSqlException sPerrorException(const string &reason);
   int doQuery(const string &query, result_t &result);
   int doQuery(const string &query);
@@ -26,8 +26,18 @@ public:
   string escape(const string &str);    
   void setLog(bool state);
 private:
+  void ensureConnect();
   MYSQL d_db;
   MYSQL_RES *d_rres;
+  string d_database;
+  string d_host;
+  uint16_t d_port;
+  string d_msocket;
+  string d_user;
+  string d_password;
+  unsigned int d_timeout;
+  bool d_connected;
+
   static bool s_dolog;
   static pthread_mutex_t s_myinitlock;
 };

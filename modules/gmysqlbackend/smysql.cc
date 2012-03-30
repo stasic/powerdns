@@ -20,36 +20,63 @@ SMySQL::SMySQL(const string &database, const string &host, uint16_t port, const 
   {
     Lock l(&s_myinitlock);
     mysql_init(&d_db);
+    mysql_options(&d_db, MYSQL_READ_DEFAULT_GROUP, "client");
+  }
 
-  #if MYSQL_VERSION_ID >= 50013
+  d_database = database;
+  d_host = host;
+  d_port = port;
+  d_msocket = msocket;
+  d_user = user;
+  d_password = password;
+  d_timeout = timeout;
+
+  d_connected=false;
+  
+  d_rres=0;
+
+  // ensureConnect();
+}
+
+void SMySQL::ensureConnect()
+{
+  if(d_connected)
+    return;
+
+  {
+    Lock l(&s_myinitlock);
+    mysql_init(&d_db);
+    mysql_options(&d_db, MYSQL_READ_DEFAULT_GROUP, "client");
     my_bool reconnect = 1;
-    mysql_options(&d_db, MYSQL_OPT_RECONNECT, &reconnect);
-  #endif
 
-  cerr<<"about to set mysql timeouts"<<endl;
-  cerr<<"MYSQL_VERSION_ID: "<<MYSQL_VERSION_ID<<endl;
+#if MYSQL_VERSION_ID >= 50013
+    my_bool reconnect = 1;
+      mysql_options(&d_db, MYSQL_OPT_RECONNECT, &reconnect);
+#endif
+
+    cerr<<"about to set mysql timeouts"<<endl;
+    cerr<<"MYSQL_VERSION_ID: "<<MYSQL_VERSION_ID<<endl;
 #if MYSQL_VERSION_ID > 50100
-  cerr<<"setting mysql timeouts!"<<endl;
-  mysql_options(&d_db, MYSQL_OPT_CONNECT_TIMEOUT, &timeout);
-  mysql_options(&d_db, MYSQL_OPT_READ_TIMEOUT, &timeout);
-  mysql_options(&d_db, MYSQL_OPT_WRITE_TIMEOUT, &timeout);
+    cerr<<"setting mysql timeouts!"<<endl;
+    mysql_options(&d_db, MYSQL_OPT_CONNECT_TIMEOUT, &d_timeout);
+    mysql_options(&d_db, MYSQL_OPT_READ_TIMEOUT, &d_timeout);
+    mysql_options(&d_db, MYSQL_OPT_WRITE_TIMEOUT, &d_timeout);
 #endif
   
-    mysql_options(&d_db, MYSQL_READ_DEFAULT_GROUP, group.c_str());
-    
-    if (!mysql_real_connect(&d_db, host.empty() ? NULL : host.c_str(), 
-          		  user.empty() ? NULL : user.c_str(), 
-          		  password.empty() ? NULL : password.c_str(),
-          		  database.empty() ? NULL : database.c_str(),
-          		  port,
-          		  msocket.empty() ? NULL : msocket.c_str(),
+    if (!mysql_real_connect(&d_db, d_host.empty() ? 0 : d_host.c_str(), 
+        		  d_user.empty() ? 0 : d_user.c_str(), 
+        		  d_password.empty() ? 0 : d_password.c_str(),
+        		  d_database.c_str(), d_port,
+        		  d_msocket.empty() ? 0 : d_msocket.c_str(),
         		  CLIENT_MULTI_RESULTS)) {
 
-    throw sPerrorException("Unable to connect to database");
-  }
+      throw sPerrorException("Unable to connect to database");
+    }
 
     d_rres=0;
   }
+
+  d_connected=true;
 }
 
 void SMySQL::setLog(bool state)
@@ -59,7 +86,8 @@ void SMySQL::setLog(bool state)
 
 SMySQL::~SMySQL()
 {
-  mysql_close(&d_db);
+  if(d_connected)
+    mysql_close(&d_db);
 }
 
 SSqlException SMySQL::sPerrorException(const string &reason)
@@ -74,6 +102,9 @@ int SMySQL::doCommand(const string &query)
 
 int SMySQL::doQuery(const string &query)
 {
+  if(!d_connected)
+    ensureConnect();
+
   if(d_rres)
     throw SSqlException("Attempt to start new MySQL query while old one still in progress");
 
