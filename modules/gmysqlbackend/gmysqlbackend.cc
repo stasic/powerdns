@@ -22,7 +22,8 @@ gMySQLBackend::gMySQLBackend(const string &mode, const string &suffix)  : GSQLBa
         	     getArg("socket"),
         	     getArg("user"),
         	     getArg("password"),
-        	     getArg("group")));
+                 getArg("group"),
+               getArgAsNum("timeout")));
     
   }
   
@@ -48,6 +49,8 @@ public:
     declare(suffix,"password","Pdns backend password to connect with","");
     declare(suffix,"group", "Pdns backend MySQL 'group' to connect as", "client");
     declare(suffix,"dnssec","Assume DNSSEC Schema is in place","no");
+    declare(suffix,"timeout","Query timeout","10");
+    declare(suffix,"gracetime","Ignore queries for this long after noticing a timeout","0");
 
     declare(suffix,"basic-query","Basic query","select content,ttl,prio,type,domain_id,name from records where type='%s' and name='%s'");
     declare(suffix,"id-query","Basic with ID query","select content,ttl,prio,type,domain_id,name from records where type='%s' and name='%s' and domain_id=%d");
@@ -60,7 +63,7 @@ public:
     declare(suffix,"wildcard-any-id-query","Wildcard ANY with ID query","select content,ttl,prio,type,domain_id,name from records where name like '%s' and domain_id='%d'");
 
     declare(suffix,"list-query","AXFR query", "select content,ttl,prio,type,domain_id,name from records where domain_id='%d'");
-
+  
     declare(suffix,"remove-empty-non-terminals-from-zone-query", "remove all empty non-terminals from zone", "delete from records where domain_id='%d' and type is null");
     declare(suffix,"insert-empty-non-terminal-query", "insert empty non-terminal in zone", "insert into records (domain_id,name,type) values ('%d','%s',null)");
     declare(suffix,"delete-empty-non-terminal-query", "delete empty non-terminal from zone", "delete from records where domain_id='%d' and name='%s' and type is null");
@@ -77,7 +80,7 @@ public:
     declare(suffix,"wildcard-any-id-query-auth","Wildcard ANY with ID query","select content,ttl,prio,type,domain_id,name, auth from records where name like '%s' and domain_id='%d'");
 
     declare(suffix,"list-query-auth","AXFR query", "select content,ttl,prio,type,domain_id,name, auth from records where domain_id='%d' order by name, type");
-
+    
     declare(suffix,"insert-empty-non-terminal-query-auth", "insert empty non-terminal in zone", "insert into records (domain_id,name,type,auth) values ('%d','%s',null,'1')");
     
     declare(suffix,"master-zone-query","Data", "select master from domains where name='%s' and type='SLAVE'");
