@@ -687,6 +687,19 @@ void GSQLBackend::lookup(const QType &qtype,const string &qname, DNSPacket *pkt_
   string format;
   char output[1024];
 
+  if(d_silentuntil >= time(0))
+  {
+    DLOG(L<<"GSQLBackend "<<d_prefix<<" dropping query during gracetime ("<<(d_silentuntil-time(0))<<" seconds left)"<<endl);
+    d_lookupSuccess = false;
+
+    d_qname=qname;
+
+    d_qtype=qtype;
+    d_count=0;
+
+    return;
+  }
+
   d_db->setLog(::arg().mustDo("query-logging"));
 
   string lcqname=toLower(qname);
@@ -737,6 +750,7 @@ void GSQLBackend::lookup(const QType &qtype,const string &qname, DNSPacket *pkt_
   }
   catch(SSqlException &e) {
     DLOG(L<<"would have thrown "<<e.txtReason()<<endl);
+    d_silentuntil = time(0)+getArgAsNum("gracetime");
     d_lookupSuccess=false;
   }
 
@@ -745,6 +759,7 @@ void GSQLBackend::lookup(const QType &qtype,const string &qname, DNSPacket *pkt_
   d_qtype=qtype;
   d_count=0;
 }
+
 bool GSQLBackend::list(const string &target, int domain_id )
 {
   DLOG(L<<"GSQLBackend constructing handle for list of domain id '"<<domain_id<<"'"<<endl);
