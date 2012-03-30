@@ -13,6 +13,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <grp.h>
 #include "dnsrecords.hh"
 #include "mplexer.hh"
 #include "statbag.hh"
@@ -264,16 +265,18 @@ try
     syslogFmt(boost::format("Changed root to directory '%s'") % g_vm["chroot"].as<string>());
   }
 
+  if(g_vm.count("setgid")) {
+    if(setgid(g_vm["setgid"].as<int>()) < 0)
+      throw runtime_error("while changing gid to "+g_vm["setgid"].as<int>());
+    syslogFmt(boost::format("Changed gid to %d") % g_vm["setgid"].as<int>());
+    if(setgroups(0, NULL) < 0)
+      throw runtime_error("while dropping supplementary groups");
+  }
+
   if(g_vm.count("setuid")) {
     if(setuid(g_vm["setuid"].as<int>()) < 0)
       throw runtime_error("while changing uid to "+g_vm["setuid"].as<int>());
     syslogFmt(boost::format("Changed uid to %d") % g_vm["setuid"].as<int>());
-  }
-
-  if(g_vm.count("setgid")) {
-    if(setuid(g_vm["setgid"].as<int>()) < 0)
-      throw runtime_error("while changing gid to "+g_vm["setgid"].as<int>());
-    syslogFmt(boost::format("Changed gid to %d") % g_vm["setgid"].as<int>());
   }
 
   if(g_vm["daemon"].as<bool>()) {

@@ -109,12 +109,14 @@ void rectifyZone(DNSSECKeeper& dk, const std::string& zone)
   sd.db->list(zone, sd.domain_id);
   DNSResourceRecord rr;
 
-  set<string> qnames, nsset;
+  set<string> qnames, nsset, dsnames;
   
   while(sd.db->get(rr)) {
     qnames.insert(rr.qname);
     if(rr.qtype.getCode() == QType::NS && !pdns_iequals(rr.qname, zone)) 
       nsset.insert(rr.qname);
+    if(rr.qtype.getCode() == QType::DS)
+      dsnames.insert(rr.qname);
   }
 
   NSEC3PARAMRecordContent ns3pr;
@@ -134,6 +136,7 @@ void rectifyZone(DNSSECKeeper& dk, const std::string& zone)
   {
     string shorter(qname);
     bool auth=true;
+
     do {
       if(nsset.count(shorter)) {  
         auth=false;
@@ -141,15 +144,32 @@ void rectifyZone(DNSSECKeeper& dk, const std::string& zone)
       }
     }while(chopOff(shorter));
 
-    if(!haveNSEC3) // NSEC
-      sd.db->updateDNSSECOrderAndAuth(sd.domain_id, zone, qname, auth);
-    else {
+    if(dsnames.count(qname))
+      auth=true;
+
+    if(haveNSEC3)
+    {
       if(!narrow) {
         hashed=toLower(toBase32Hex(hashQNameWithSalt(ns3pr.d_iterations, ns3pr.d_salt, qname)));
         if(g_verbose)
           cerr<<"'"<<qname<<"' -> '"<< hashed <<"'"<<endl;
       }
       sd.db->updateDNSSECOrderAndAuthAbsolute(sd.domain_id, qname, hashed, auth);
+      if(!auth || dsnames.count(qname))
+      {
+        sd.db->nullifyDNSSECOrderNameAndAuth(sd.domain_id, qname, "NS");
+        sd.db->nullifyDNSSECOrderNameAndAuth(sd.domain_id, qname, "A");
+        sd.db->nullifyDNSSECOrderNameAndAuth(sd.domain_id, qname, "AAAA");
+      }
+    }
+    else // NSEC
+    {
+      sd.db->updateDNSSECOrderAndAuth(sd.domain_id, zone, qname, auth);
+      if(!auth || dsnames.count(qname))
+      {
+        sd.db->nullifyDNSSECOrderNameAndAuth(sd.domain_id, qname, "A");
+        sd.db->nullifyDNSSECOrderNameAndAuth(sd.domain_id, qname, "AAAA");
+      }
     }
   }
   if(doTransaction)
@@ -190,7 +210,7 @@ int checkZone(DNSSECKeeper& dk, const std::string& zone)
     if(rr.qtype.getCode() == QType::TXT && !rr.content.empty() && rr.content[0]!='"')
       rr.content = "\""+rr.content+"\"";  
       
-    if(rr.auth == 0 && rr.qtype.getCode()!=QType::NS && rr.qtype.getCode()!=QType::A)
+    if(rr.auth == 0 && rr.qtype.getCode()!=QType::NS && rr.qtype.getCode()!=QType::A && rr.qtype.getCode()!=QType::AAAA)
     {
       cout<<"Following record is auth=0, run pdnssec rectify-zone?: "<<rr.qname<<" IN " <<rr.qtype.getName()<< " " << rr.content<<endl;
       numerrors++;
@@ -403,19 +423,16 @@ bool secureZone(DNSSECKeeper& dk, const std::string& zone)
   if(!dk.secureZone(zone, 8)) {
     cerr<<"No backend was able to secure '"<<zone<<"', most likely because no DNSSEC\n";
     cerr<<"capable backends are loaded, or because the backends have DNSSEC disabled.\n";
-    cerr<<"For the Generic SQL backends, set 'gsqlite3-dnssec' or 'gmysql-dnssec' or\n";
-    cerr<<"'gpgsql-dnssec' etc. Also make sure the schema has been updated for DNSSEC!\n";
+    cerr<<"For the Generic SQL backends, set the 'gsqlite3-dnssec', 'gmysql-dnssec' or\n";
+    cerr<<"'gpgsql-dnssec' flag. Also make sure the schema has been updated for DNSSEC!\n";
     return false;
   }
 
   if(!dk.isSecuredZone(zone)) {
     cerr<<"Failed to secure zone. Is your backend dnssec enabled? (set \n";
     cerr<<"gsqlite3-dnssec, or gmysql-dnssec etc). Check this first.\n";
-    cerr<<"If you run with the BIND backend, make sure to also launch another\n";
-    cerr<<"backend which supports storage of DNSSEC settings.\n";
-    cerr<<"In addition, add '"<<zone<<"' to this backend, possibly like this: \n\n";
-    cerr<<"   insert into domains (name, type) values ('"<<zone<<"', 'NATIVE');\n\n";
-    cerr<<"And then rerun secure-zone"<<endl;
+    cerr<<"If you run with the BIND backend, make sure you have configured\n";
+    cerr<<"it to use DNSSEC with 'bind-dnssec-db' and 'pdnssec create-bind-db'!\n";
     return false;
   }
 
@@ -461,29 +478,29 @@ try
   if(cmds.empty() || g_vm.count("help")) {
     cerr<<"Usage: \npdnssec [options] <command> [params ..]\n\n";
     cerr<<"Commands:\n";
-    cerr<<"activate-zone-key ZONE KEY-ID    Activate the key with key id KEY-ID in ZONE\n";
+    cerr<<"activate-zone-key ZONE KEY-ID      Activate the key with key id KEY-ID in ZONE\n";
     cerr<<"add-zone-key ZONE [zsk|ksk] [bits]\n";
     cerr<<"             [rsasha1|rsasha256|rsasha512|gost|ecdsa256|ecdsa384]\n";
-    cerr<<"                                 Add a ZSK or KSK to zone and specify algo&bits\n";
-    cerr<<"check-zone ZONE                  Check a zone for correctness\n";
-    cerr<<"check-all-zones                  Check all zones for correctness\n";
-    cerr<<"create-bind-db FNAME             Create DNSSEC db for BIND backend (bind-dnssec-db)\n"; 
-    cerr<<"deactivate-zone-key ZONE KEY-ID  Deactivate the key with key id KEY-ID in ZONE\n";
-    cerr<<"disable-dnssec ZONE              Deactivate all keys and unset PRESIGNED in ZONE\n";
-    cerr<<"export-zone-dnskey ZONE KEY-ID   Export to stdout the public DNSKEY described\n";
-    cerr<<"export-zone-key ZONE KEY-ID      Export to stdout the private key described\n";
-    cerr<<"hash-zone-record ZONE RNAME      Calculate the NSEC3 hash for RNAME in ZONE\n";
-    cerr<<"import-zone-key ZONE FILE        Import from a file a private key, ZSK or KSK\n";            
-    cerr<<"                [ksk|zsk]        Defaults to KSK\n";
-    cerr<<"rectify-zone ZONE [ZONE ..]      Fix up DNSSEC fields (order, auth)\n";
-    cerr<<"rectify-all-zones                Rectify all zones.\n";
-    cerr<<"remove-zone-key ZONE KEY-ID      Remove key with KEY-ID from ZONE\n";
-    cerr<<"secure-zone ZONE [ZONE ..]       Add KSK and two ZSKs\n";
-    cerr<<"set-nsec3 ZONE 'params' [narrow] Enable NSEC3 with PARAMs. Optionally narrow\n";
-    cerr<<"set-presigned ZONE               Use presigned RRSIGs from storage\n";
-    cerr<<"show-zone ZONE                   Show DNSSEC (public) key details about a zone\n";
-    cerr<<"unset-nsec3 ZONE                 Switch back to NSEC\n";
-    cerr<<"unset-presigned ZONE             No longer use presigned RRSIGs\n\n";
+    cerr<<"                                   Add a ZSK or KSK to zone and specify algo&bits\n";
+    cerr<<"check-zone ZONE                    Check a zone for correctness\n";
+    cerr<<"check-all-zones                    Check all zones for correctness\n";
+    cerr<<"create-bind-db FNAME               Create DNSSEC db for BIND backend (bind-dnssec-db)\n"; 
+    cerr<<"deactivate-zone-key ZONE KEY-ID    Deactivate the key with key id KEY-ID in ZONE\n";
+    cerr<<"disable-dnssec ZONE                Deactivate all keys and unset PRESIGNED in ZONE\n";
+    cerr<<"export-zone-dnskey ZONE KEY-ID     Export to stdout the public DNSKEY described\n";
+    cerr<<"export-zone-key ZONE KEY-ID        Export to stdout the private key described\n";
+    cerr<<"hash-zone-record ZONE RNAME        Calculate the NSEC3 hash for RNAME in ZONE\n";
+    cerr<<"import-zone-key ZONE FILE          Import from a file a private key, ZSK or KSK\n";            
+    cerr<<"                [ksk|zsk]          Defaults to KSK\n";
+    cerr<<"rectify-zone ZONE [ZONE ..]        Fix up DNSSEC fields (order, auth)\n";
+    cerr<<"rectify-all-zones                  Rectify all zones.\n";
+    cerr<<"remove-zone-key ZONE KEY-ID        Remove key with KEY-ID from ZONE\n";
+    cerr<<"secure-zone ZONE [ZONE ..]        Add KSK and two ZSKs\n";
+    cerr<<"set-nsec3 ZONE ['params' [narrow]] Enable NSEC3 with PARAMs. Optionally narrow\n";
+    cerr<<"set-presigned ZONE                 Use presigned RRSIGs from storage\n";
+    cerr<<"show-zone ZONE                     Show DNSSEC (public) key details about a zone\n";
+    cerr<<"unset-nsec3 ZONE                   Switch back to NSEC\n";
+    cerr<<"unset-presigned ZONE               No longer use presigned RRSIGs\n\n";
     cerr<<"Options:"<<endl;
     cerr<<desc<<endl;
     return 0;
@@ -584,6 +601,11 @@ try
     }
     const string& zone=cmds[1];
     unsigned int id=atoi(cmds[2].c_str());
+    if(!id)
+    {
+      cerr<<"Invalid KEY-ID"<<endl;
+      return 1;
+    }
     dk.activateKey(zone, id);
   }
   else if(cmds[0] == "deactivate-zone-key") {
@@ -593,6 +615,11 @@ try
     }
     const string& zone=cmds[1];
     unsigned int id=atoi(cmds[2].c_str());
+    if(!id)
+    {
+      cerr<<"Invalid KEY-ID"<<endl;
+      return 1;
+    }
     dk.deactivateKey(zone, id);
   }
   else if(cmds[0] == "add-zone-key") {
@@ -622,6 +649,8 @@ try
         algorithm=13;
       else if(pdns_iequals(cmds[n], "ecdsa384"))
         algorithm=14;
+      else if(pdns_iequals(cmds[n], "ed25519"))
+        algorithm=250;        
       else if(atoi(cmds[n].c_str()))
         bits = atoi(cmds[n].c_str());
       else { 

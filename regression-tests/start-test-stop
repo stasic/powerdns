@@ -10,7 +10,7 @@ tosql ()
 port=$1
 [ -z "$port" ] && port=5300
 context=$2
-[ -z "$context" ] && context=bind-gsqlite3
+[ -z "$context" ] && context=bind-dnssec
 wait=$3
 
 if [ "$port" = help ] || [ "$context" = help ]
@@ -23,6 +23,8 @@ Usage: ./start-test-stop <port> [<context>] [wait]
 context is one of:
 bind bind-dnssec bind-dnssec-nsec3
 gmysql-nodnssec gmysql gmysql-nsec3
+gsqlite3-nodnssec gsqlite3 gsqlite3-nsec3
+gpgsql-nodnssec gpgsql gpgsql-nsec3
 
 add 'wait' (literally) after the context to not kill 
 pdns_server immediately after testing
@@ -46,9 +48,9 @@ case $context in
                 do
                     ../pdns/pdnssec --config-dir=. set-nsec3 $zone '1 1 1 abcd' 2>&1
                 done
-                extracontexts="nsec3 bind"
+                extracontexts="bind dnssec nsec3"
             else
-                extracontexts="bind"
+                extracontexts="bind dnssec"
             fi
 			../pdns/pdns_server --daemon=no --local-port=$port --socket-dir=./  \
 				--no-shuffle --launch=bind --bind-config=./named.conf       \
@@ -81,6 +83,7 @@ case $context in
 				--gmysql-password="$GMYSQLPASSWD" &
 			skipreasons=nodnssec
 			;;
+
 		gmysql | gmysql-nsec3)
 			[ -z "$GMYSQLDB" ] && GMYSQLDB=pdnstest
 			[ -z "$GMYSQLUSER" ] && GMYSQLUSER=root
@@ -126,7 +129,129 @@ __EOF__
 				--gmysql-password="$GMYSQLPASSWD" &
 			if [ $context = gmysql-nsec3 ]
 			then
-				extracontexts=nsec3
+				extracontexts="dnssec nsec3"
+			else
+				extracontexts="dnssec"
+			fi
+
+			;;	
+		gpgsql | gpgsql-nsec3)
+			[ -z "$GPGSQLDB" ] && GPGSQLDB=pdnstest
+			[ -z "$GPGSQLUSER" ] && GPGSQLUSER=$(whoami)
+
+			dropdb --user="$GPGSQLUSER" "$GPGSQLDB"	|| echo ignoring mysqladmin drop failure
+			createdb --user="$GPGSQLUSER" "$GPGSQLDB"	|| echo ignoring mysqladmin drop failure
+			psql --user="$GPGSQLUSER" "$GPGSQLDB" < ../pdns/no-dnssec.schema.pgsql.sql
+			psql --user="$GPGSQLUSER" "$GPGSQLDB" < ../pdns/dnssec.schema.pgsql.sql
+
+			tosql gpgsql | psql --user="$GPGSQLUSER" "$GPGSQLDB" 2>&1 | uniq -c
+
+			cat > pdns-gpgsql.conf << __EOF__
+launch=gpgsql
+gpgsql-dbname=$GPGSQLDB
+gpgsql-user=$GPGSQLUSER
+gpgsql-dnssec
+__EOF__
+			for zone in $(grep zone named.conf  | cut -f2 -d\")
+			do
+				../pdns/pdnssec --config-dir=. --config-name=gpgsql secure-zone $zone 2>&1
+				if [ $context = gpgsql-nsec3 ]
+				then
+					../pdns/pdnssec --config-dir=. --config-name=gpgsql set-nsec3 $zone '1 1 1 abcd' 2>&1
+					../pdns/pdnssec --config-dir=. --config-name=gpgsql rectify-zone $zone 2>&1
+				fi
+			done
+
+			../pdns/pdns_server --daemon=no --local-port=$port --socket-dir=./  \
+				--no-shuffle --launch=gpgsql --gpgsql-dnssec \
+				--fancy-records --query-logging --send-root-referral --loglevel=9 \
+				--cache-ttl=0 --no-config \
+				--gpgsql-dbname="$GPGSQLDB" \
+				--gpgsql-user="$GPGSQLUSER" &
+			if [ $context = gpgsql-nsec3 ]
+			then
+				extracontexts="dnssec nsec3"
+			else
+				extracontexts="dnssec"
+			fi
+
+			;;	
+		gpgsql-nodnssec)
+			[ -z "$GPGSQLDB" ] && GPGSQLDB=pdnstest
+			[ -z "$GPGSQLUSER" ] && GPGSQLUSER=$(whoami)
+
+			dropdb --user="$GPGSQLUSER" "$GPGSQLDB"	|| echo ignoring mysqladmin drop failure
+			createdb --user="$GPGSQLUSER" "$GPGSQLDB"	|| echo ignoring mysqladmin drop failure
+			psql --user="$GPGSQLUSER" "$GPGSQLDB" < ../pdns/no-dnssec.schema.pgsql.sql
+
+			tosql gpgsql | psql --user="$GPGSQLUSER" "$GPGSQLDB" 2>&1 | uniq -c
+
+			cat > pdns-gpgsql.conf << __EOF__
+launch=gpgsql
+gpgsql-dbname=$GPGSQLDB
+gpgsql-user=$GPGSQLUSER
+__EOF__
+			../pdns/pdns_server --daemon=no --local-port=$port --socket-dir=./  \
+				--no-shuffle --launch=gpgsql \
+				--fancy-records --query-logging --send-root-referral --loglevel=9 \
+				--cache-ttl=0 --no-config \
+				--gpgsql-dbname="$GPGSQLDB" \
+				--gpgsql-user="$GPGSQLUSER" &
+			skipreasons=nodnssec
+			;;	
+
+
+		gsqlite3-nodnssec)
+			rm -f pdns.sqlite3
+			sqlite3 pdns.sqlite3 < ../pdns/no-dnssec.schema.sqlite3.sql
+			tosql gsqlite | sqlite3 pdns.sqlite3
+			echo ANALYZE\; | sqlite3 pdns.sqlite3
+
+			cat > pdns-gsqlite3.conf << __EOF__
+launch=gsqlite3
+gsqlite3-database=pdns.sqlite3
+__EOF__
+
+			../pdns/pdns_server --daemon=no --local-port=$port --socket-dir=./  \
+				--no-shuffle --launch=gsqlite3 \
+				--fancy-records --query-logging --send-root-referral --loglevel=9 \
+				--cache-ttl=0 --no-config \
+				--gsqlite3-database=pdns.sqlite3 &
+			skipreasons=nodnssec
+
+			;;						
+		gsqlite3 | gsqlite3-nsec3)
+			rm -f pdns.sqlite3
+			sqlite3 pdns.sqlite3 < ../pdns/no-dnssec.schema.sqlite3.sql
+			sqlite3 pdns.sqlite3 < ../pdns/dnssec.schema.sqlite3.sql
+			tosql gsqlite | sqlite3 pdns.sqlite3
+			echo ANALYZE\; | sqlite3 pdns.sqlite3
+
+			cat > pdns-gsqlite3.conf << __EOF__
+launch=gsqlite3
+gsqlite3-database=pdns.sqlite3
+gsqlite3-dnssec
+__EOF__
+			for zone in $(grep zone named.conf  | cut -f2 -d\")
+			do
+				../pdns/pdnssec --config-dir=. --config-name=gsqlite3	secure-zone $zone 2>&1
+				if [ $context = gsqlite3-nsec3 ]
+				then
+					../pdns/pdnssec --config-dir=. --config-name=gsqlite3 set-nsec3 $zone '1 1 1 abcd' 2>&1
+					../pdns/pdnssec --config-dir=. --config-name=gsqlite3 rectify-zone $zone 2>&1
+				fi
+			done
+
+			../pdns/pdns_server --daemon=no --local-port=$port --socket-dir=./  \
+				--no-shuffle --launch=gsqlite3 --gsqlite3-dnssec \
+				--fancy-records --query-logging --send-root-referral --loglevel=9 \
+				--cache-ttl=0 --no-config \
+				--gsqlite3-database=pdns.sqlite3 &
+			if [ $context = gsqlite3-nsec3 ]
+			then
+				extracontexts="dnssec nsec3"
+			else
+				extracontexts="dnssec"
 			fi
 			;;			
 		tinydns)

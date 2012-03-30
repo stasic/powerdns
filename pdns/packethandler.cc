@@ -55,8 +55,6 @@ PacketHandler::PacketHandler():B(s_programname)
 {
   s_count++;
   d_doFancyRecords = (::arg()["fancy-records"]!="no");
-  d_doWildcards = (::arg()["wildcards"]!="no");
-  d_doCNAME = (::arg()["skip-cname"]=="no");
   d_doRecursion= ::arg().mustDo("recursor");
   d_logDNSDetails= ::arg().mustDo("log-dns-details");
   d_doIPv6AdditionalProcessing = ::arg().mustDo("do-ipv6-additional-processing");
@@ -660,7 +658,7 @@ void PacketHandler::addNSEC(DNSPacket *p, DNSPacket *r, const string& target, co
 
   string before,after;
   //cerr<<"Calling getBeforeandAfter!"<<endl;
-  sd.db->getBeforeAndAfterNames(sd.domain_id, auth, target, before, after); 
+  sd.db->getBeforeAndAfterNames(sd.domain_id, auth, target, before, after);
   // cerr<<"Done calling, before='"<<before<<"', after='"<<after<<"'"<<endl;
 
   // this stuff is wrong (but it appears to work)
@@ -672,8 +670,8 @@ void PacketHandler::addNSEC(DNSPacket *p, DNSPacket *r, const string& target, co
     emitNSEC(before, after, target, sd, r, mode);
 
     // this one does wildcard denial, if applicable
-    sd.db->getBeforeAndAfterNames(sd.domain_id, auth, auth, before, after); 
-    emitNSEC(auth, after, auth, sd, r, mode);
+    sd.db->getBeforeAndAfterNames(sd.domain_id, auth, auth, before, after);
+    emitNSEC(before, after, auth, sd, r, mode);
   }
 
   if(mode == 3)
@@ -895,7 +893,7 @@ void PacketHandler::synthesiseRRSIGs(DNSPacket* p, DNSPacket* r)
   else {
     // now get the NSEC too (since we must sign it!)
     string before,after;
-    sd.db->getBeforeAndAfterNames(sd.domain_id, sd.qname, p->qdomain, before, after); 
+    sd.db->getBeforeAndAfterNames(sd.domain_id, sd.qname, p->qdomain, before, after);
   
     nrc.d_next=after;
   
@@ -1213,12 +1211,18 @@ DNSPacket *PacketHandler::questionOrRecurse(DNSPacket *p, bool *shouldRecurse)
       addNSEC(p, r, target, sd.qname, 2); // only NSEC please
       goto sendit;
     }
-    
+
     // this TRUMPS a cname!
     if(p->qtype.getCode() == QType::RRSIG && d_dk.isSecuredZone(sd.qname)) {
       synthesiseRRSIGs(p, r);
       goto sendit;  
     }
+
+    DLOG(L<<"Checking for referrals first, unless this is a DS query"<<endl);
+    if(p->qtype.getCode() != QType::DS && tryReferral(p, r, sd, target))
+      goto sendit;
+
+    DLOG(L<<"Got no referrals, trying ANY"<<endl);
 
     // see what we get..
     B.lookup(QType(QType::ANY), target, p, sd.domain_id);
@@ -1256,13 +1260,18 @@ DNSPacket *PacketHandler::questionOrRecurse(DNSPacket *p, bool *shouldRecurse)
     }
 
     if(rrset.empty()) {
-      // try NS referrals, and if they don't work, go look for wildcards
-      
-      DLOG(L<<"Found nothing in the ANY and wildcards, let's try NS referral"<<endl);
-      if(tryReferral(p, r, sd, target))
-        goto sendit;
+      DLOG(L<<"checking qtype.getCode() ["<<(p->qtype.getCode())<<"] against QType::DS ["<<(QType::DS)<<endl);
+      if(p->qtype.getCode() == QType::DS)
+      {
+        DLOG(L<<"DS query found no direct result, trying referral now"<<endl);
+        if(tryReferral(p, r, sd, target))
+        {
+          DLOG(L<<"got referral for DS query"<<endl);
+          goto sendit;
+        }
+      }
 
-      DLOG(L<<Logger::Warning<<"Found nothing in the ANY, but let's try wildcards.."<<endl);
+      DLOG(L<<Logger::Warning<<"Found nothing in the by-name ANY, but let's try wildcards.."<<endl);
       bool wereRetargeted(false), nodata(false);
       if(tryWildcard(p, r, sd, target, wereRetargeted, nodata)) {
         if(wereRetargeted) {

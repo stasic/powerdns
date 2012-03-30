@@ -1,12 +1,11 @@
 dnl intro
 AC_INIT(pdns/receiver.cc)
-AM_INIT_AUTOMAKE(pdns, 3.1-pre)
+AM_INIT_AUTOMAKE(pdns, 3.1-rc1)
 AC_CANONICAL_HOST
 AM_CONFIG_HEADER(config.h)
 AC_C_BIGENDIAN 
 AC_PREREQ(2.52)
-CXXFLAGS="$CXXFLAGS -Wall -O2"
-
+: ${CXXFLAGS="-Wall -O2"}
 AC_PREFIX_DEFAULT(/usr/local)
 AC_PROG_CC
 AC_PROG_CXX
@@ -53,7 +52,19 @@ if test "$WITH_LUA" != "no"; then
  AC_SUBST(LUA_CFLAGS)
  AC_SUBST(LUA_LIBS)
 fi
-                                         
+         
+dnl Allow user to require SQLite3
+AC_MSG_CHECKING(whether user requires sqlite3)
+AC_ARG_WITH(sqlite3, AC_HELP_STRING([--with-sqlite3],[include sqlite3 driver]), [WITH_SQLITE3=$withval],[WITH_SQLITE3=no])
+AC_MSG_RESULT($WITH_SQLITE3)
+SQLITE3PC=sqlite3
+if test "$WITH_SQLITE3" != "no"; then
+  needsqlite3=yes
+  if test "$WITH_SQLITE3" != "yes"; then
+    SQLITE3PC=$WITH_SQLITE3
+  fi
+fi
+
 dnl Checks for header files.
 AC_HEADER_STDC
 AC_CHECK_HEADERS(fcntl.h  getopt.h limits.h strings.h sys/time.h syslog.h unistd.h)
@@ -247,9 +258,6 @@ AM_CONDITIONAL(RECURSOR,test x"$enable_recursor" = "xyes")
 for a in $modules $dynmodules
 do
 	case "$a" in
-		mysql )
-			needmysql=yes
-		;;
 		gmysql )
 			needmysql=yes
 		;;
@@ -496,9 +504,10 @@ fi
 
 if test "$needsqlite3"
 then
-	PKG_CHECK_MODULES(SQLITE3, sqlite3, HAVE_SQLITE=yes, AC_MSG_ERROR([+Could not find sqlite3]))
+	PKG_CHECK_MODULES(SQLITE3, $SQLITE3PC, HAVE_SQLITE3=yes, AC_MSG_ERROR([+Could not find sqlite3]))
         AC_SUBST(SQLITE3_LIBS)
         AC_SUBST(SQLITE3_CFLAGS)
+        AC_DEFINE(HAVE_SQLITE3,1,[If we have sqlite3])
 fi
 
 if test "$needcdb"
@@ -507,6 +516,8 @@ then
         AC_SUBST(CDB_LIBS)
         AC_SUBST(CDB_CFLAGS)
 fi
+
+AM_CONDITIONAL(SQLITE3, test "$needsqlite3")
 
 
 if test "$needunixodbc"
@@ -602,7 +613,6 @@ export moduledirs moduleobjects modulelibs
 
 AC_OUTPUT(Makefile modules/Makefile pdns/Makefile codedocs/Makefile \
 pdns/backends/Makefile pdns/backends/bind/Makefile pdns/pdns pdns/precursor \
-modules/mysqlbackend/Makefile modules/pdnsbackend/Makefile \
 modules/gmysqlbackend/Makefile modules/db2backend/Makefile \
 modules/geobackend/Makefile modules/opendbxbackend/Makefile \
 modules/pipebackend/Makefile modules/oraclebackend/Makefile \
