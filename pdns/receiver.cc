@@ -466,7 +466,6 @@ int main(int argc, char **argv)
     
     // we really need to do work - either standalone or as an instance
     
-    cerr<<"mustdo(tbhandler)="<<::arg().mustDo("traceback-handler")<<endl;
 #ifdef __linux__
     if(!::arg().mustDo("traceback-handler")) {
       signal(SIGSEGV,SIG_DFL);
