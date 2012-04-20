@@ -468,6 +468,7 @@ int main(int argc, char **argv)
     
 #ifdef __linux__
     if(!::arg().mustDo("traceback-handler")) {
+      L<<Logger::Warning<<"Disabling traceback handler"<<endl;
       signal(SIGSEGV,SIG_DFL);
       signal(SIGFPE,SIG_DFL);
       signal(SIGABRT,SIG_DFL);
