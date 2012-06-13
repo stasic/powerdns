@@ -172,7 +172,7 @@ vector<DNSBackend *>BackendMakerClass::all(bool metadataOnly, const string &pref
   try {
     for(vector<pair<string,string> >::const_iterator i=d_instances.begin();i!=d_instances.end();++i) {
       DNSBackend *made;
-      L<<Logger::Warning<<"first="<<i->first<<" second="<<i->second<<" prefix="<<prefix<<endl;
+      DLOG(L<<Logger::Warning<<"first="<<i->first<<" second="<<i->second<<" prefix="<<prefix<<endl);
       if(i->first+i->second == prefix)
       {
         // failsafe during dev!
@@ -186,7 +186,7 @@ vector<DNSBackend *>BackendMakerClass::all(bool metadataOnly, const string &pref
           made = d_repository[i->first]->make(i->second);
         if(!made)
           throw AhuException("Unable to launch backend '"+i->first+"'");
-        L<<Logger::Warning<<"in BackendMakers::all, prefix=["<<prefix<<"] d_prefix=["<<made->d_prefix<<"]"<<endl;
+        DLOG(L<<Logger::Warning<<"in BackendMakers::all, prefix=["<<prefix<<"] d_prefix=["<<made->d_prefix<<"]"<<endl);
         ret.push_back(made);
       }
     }

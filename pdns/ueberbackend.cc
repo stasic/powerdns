@@ -239,7 +239,7 @@ void UeberBackend::getUpdatedMasters(vector<DomainInfo>* domains)
 /** special trick - if sd.db is set to -1, the cache is ignored */
 bool UeberBackend::getSOA(const string &domain, SOAData &sd, DNSPacket *p)
 {
-  cerr<<"getSOA "<<domain<<", nest="<<d_nest<<endl;
+  // cerr<<"getSOA "<<domain<<", nest="<<d_nest<<endl;
   d_question.qtype=QType::SOA;
   d_question.qname=domain;
   d_question.zoneId=-1;
@@ -257,9 +257,9 @@ bool UeberBackend::getSOA(const string &domain, SOAData &sd, DNSPacket *p)
       return true;
     }
   }
-  cerr<<"backendcount: "<<backends.size()<<endl;
+  // cerr<<"backendcount: "<<backends.size()<<endl;
   for(vector<DNSBackend *>::const_iterator i=backends.begin();i!=backends.end();++i) {
-    cerr<<"nest="<<d_nest<<", asking backend "<<((*i)->d_prefix)<<endl;
+    // cerr<<"nest="<<d_nest<<", asking backend "<<((*i)->d_prefix)<<endl;
     if((*i)->getSOA(domain, sd, p)) {
       DNSResourceRecord rr;
       rr.qname=domain;
@@ -583,7 +583,7 @@ public:
   // }
   DNSBackend *make(const string &suffix="")
   {
-    L<<Logger::Warning<<"launching nest ("<<suffix<<")!"<<endl;
+    DLOG(L<<Logger::Warning<<"launching nest ("<<suffix<<")!"<<endl);
     return new UeberBackend("default", true, suffix);
   }
 };

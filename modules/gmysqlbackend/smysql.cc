@@ -54,10 +54,7 @@ void SMySQL::ensureConnect()
       mysql_options(&d_db, MYSQL_OPT_RECONNECT, &reconnect);
 #endif
 
-    cerr<<"about to set mysql timeouts"<<endl;
-    cerr<<"MYSQL_VERSION_ID: "<<MYSQL_VERSION_ID<<endl;
 #if MYSQL_VERSION_ID > 50100
-    cerr<<"setting mysql timeouts!"<<endl;
     mysql_options(&d_db, MYSQL_OPT_CONNECT_TIMEOUT, &d_timeout);
     mysql_options(&d_db, MYSQL_OPT_READ_TIMEOUT, &d_timeout);
     mysql_options(&d_db, MYSQL_OPT_WRITE_TIMEOUT, &d_timeout);
