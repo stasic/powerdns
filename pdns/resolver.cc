@@ -314,7 +314,7 @@ AXFRRetriever::AXFRRetriever(const int fd, bool tcp)
 
   d_buf = shared_array<char>(new char[65536]);
   d_soacount = 0;
-  d_tcp = issocket;
+  d_tcp = tcp;
 
   int res = waitForData(d_sock, 10, 0);
 
