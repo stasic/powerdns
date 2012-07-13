@@ -24,6 +24,7 @@ try
     reportAllTypes();
 
     while(r.getChunk(recs, true)) {
+		cout<<"; begin chunk"<<endl;
 		for(Resolver::res_t::iterator i=recs.begin();i!=recs.end();++i) {
 			cout<<(i->qname)<<".\t";
 			cout<<(i->ttl)<<"\t";
@@ -31,6 +32,7 @@ try
 			cout<<(i->qtype.getName())<<"\t";
 			cout<<(i->content)<<endl;
 		}
+		cout<<"; end chunk"<<endl;
 	}
 }
 catch (std::exception &e)
