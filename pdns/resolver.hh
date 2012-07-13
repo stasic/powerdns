@@ -37,6 +37,7 @@
 #include "dns.hh"
 #include "namespaces.hh"
 #include "dnsbackend.hh"
+#include "dnsrecords.hh"
 
 class ResolverException : public AhuException
 {
@@ -84,6 +85,8 @@ private:
 class AXFRRetriever : public boost::noncopyable
 {
   public:
+    AXFRRetriever(const int fd,
+        bool issocket=false);
     AXFRRetriever(const ComboAddress& remote,
         const string& zone,
         const string& tsigkeyname=string(),
@@ -91,9 +94,9 @@ class AXFRRetriever : public boost::noncopyable
         const string& tsigsecret=string(),
         const ComboAddress* laddr = NULL);
 	~AXFRRetriever();
-    int getChunk(Resolver::res_t &res);  
+    int getChunk(Resolver::res_t &res, bool ignoresoacount=false);  
   
-  private:
+  protected:
     void connect();
     int getLength();
     void timeoutReadn(uint16_t bytes);  
@@ -101,6 +104,7 @@ class AXFRRetriever : public boost::noncopyable
     shared_array<char> d_buf;
     string d_domain;
     int d_sock;
+    bool d_sockissocket;
     int d_soacount;
     ComboAddress d_remote;
     

@@ -23,7 +23,7 @@ bin_PROGRAMS = pdns_control pdnssec dnsreplay
 endif
 
 EXTRA_PROGRAMS=pdns_recursor sdig tsig-tests speedtest pdns_control dnsscope dnsgram \
-toysdig dnsdemog dnswasher dnsscan nproxy notify pdnssec dnsbulktest  # dnslabel # tcptorture
+toysdig dnsdemog dnswasher dnsscan nproxy notify pdnssec dnsbulktest flow2zone # dnslabel # tcptorture
 
 pdns_server_SOURCES=dnspacket.cc nameserver.cc tcpreceiver.hh \
 qtype.cc logger.cc arguments.cc packethandler.cc tcpreceiver.cc \
@@ -148,7 +148,12 @@ dnsbulktest_SOURCES=dnsbulktest.cc misc.cc unix_utility.cc qtype.cc logger.cc st
 dnsbulktest_LDFLAGS= @DYNLINKFLAGS@ @THREADFLAGS@ $(BOOST_PROGRAM_OPTIONS_LDFLAGS)
 dnsbulktest_LDADD= $(BOOST_PROGRAM_OPTIONS_LIBS)
 
-# unix_utility.cc
+flow2zone_SOURCES=flow2zone.cc resolver.cc misc.cc qtype.cc dnsrecords.cc nsecrecords.cc sillyrecords.cc \
+	dnswriter.cc dnslabeltext.cc dnsparser.cc rcpgenerator.cc unix_utility.cc logger.cc statbag.cc base64.cc \
+	base32.cc dnssecinfra.cc md5.cc arguments.cc dns.cc \
+	aes/dns_random.cc aes/aescrypt.c aes/aeskey.c aes/aestab.c aes/aes_modes.c
+flow2zone_LDFLAGS= @DYNLINKFLAGS@ @THREADFLAGS@ $(BOOST_PROGRAM_OPTIONS_LDFLAGS)
+flow2zone_LDADD=  ext/polarssl-1.1.2/library/libpolarssl.a $(BOOST_PROGRAM_OPTIONS_LIBS)
 
 dnsscan_SOURCES=dnsscan.cc misc.cc  qtype.cc anadns.hh \
 	logger.cc statbag.cc  dnspcap.cc dnspcap.hh dnsparser.cc dnsrecords.cc dnsparser.hh  \

@@ -306,6 +306,24 @@ void Resolver::getSoaSerial(const string &ipport, const string &domain, uint32_t
   *serial=(uint32_t)atol(parts[2].c_str());
 }
 
+AXFRRetriever::AXFRRetriever(const int fd, bool issocket)
+{
+  d_sock=dup(fd);
+  if(d_sock==-1)
+    throw ResolverException("dup failed");
+
+  d_buf = shared_array<char>(new char[65536]);
+  d_soacount = 0;
+  d_sockissocket = issocket;
+
+  int res = waitForData(d_sock, 10, 0);
+
+  if(!res)
+    throw ResolverException("Timeout waiting for answer from "+d_remote.toStringWithPort()+" during AXFR");
+  if(res<0)
+    throw ResolverException("Error waiting for answer from "+d_remote.toStringWithPort()+": "+stringerror());
+}
+
 AXFRRetriever::AXFRRetriever(const ComboAddress& remote,
 	const string& domain,
 	const string& tsigkeyname,
@@ -328,6 +346,7 @@ AXFRRetriever::AXFRRetriever(const ComboAddress& remote,
   d_sock = -1;
   try {
     d_sock = makeQuerySocket(local, false); // make a TCP socket
+    d_sockissocket = true;
     d_buf = shared_array<char>(new char[65536]);
     d_remote = remote; // mostly for error reporting
     this->connect();
@@ -381,10 +400,10 @@ AXFRRetriever::~AXFRRetriever()
 
 
 
-int AXFRRetriever::getChunk(Resolver::res_t &res) // Implementation is making sure RFC2845 4.4 is followed.
+int AXFRRetriever::getChunk(Resolver::res_t &res, bool ignoresoacount) // Implementation is making sure RFC2845 4.4 is followed.
 {
-  if(d_soacount > 1)
-    return false;
+  if(!ignoresoacount && d_soacount > 1)
+     return false;
 
   // d_sock is connected and is about to spit out a packet
   int len=getLength();
@@ -468,8 +487,10 @@ void AXFRRetriever::timeoutReadn(uint16_t bytes)
   while(n<bytes) {
     if(waitForData(d_sock, 10-(time(0)-start))<0)
       throw ResolverException("Reading data from remote nameserver over TCP: "+stringerror());
-
-    numread=recv(d_sock, d_buf.get()+n, bytes-n, 0);
+    if(d_sockissocket)
+      numread=recv(d_sock, d_buf.get()+n, bytes-n, 0);
+    else
+      numread=read(d_sock, d_buf.get()+n, bytes-n);
     if(numread<0)
       throw ResolverException("Reading data from remote nameserver over TCP: "+stringerror());
     if(numread==0)
