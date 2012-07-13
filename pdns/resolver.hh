@@ -86,7 +86,7 @@ class AXFRRetriever : public boost::noncopyable
 {
   public:
     AXFRRetriever(const int fd,
-        bool issocket=false);
+        bool tcp=false);
     AXFRRetriever(const ComboAddress& remote,
         const string& zone,
         const string& tsigkeyname=string(),
@@ -104,7 +104,7 @@ class AXFRRetriever : public boost::noncopyable
     shared_array<char> d_buf;
     string d_domain;
     int d_sock;
-    bool d_sockissocket;
+    bool d_tcp;
     int d_soacount;
     ComboAddress d_remote;
     

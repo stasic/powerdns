@@ -306,7 +306,7 @@ void Resolver::getSoaSerial(const string &ipport, const string &domain, uint32_t
   *serial=(uint32_t)atol(parts[2].c_str());
 }
 
-AXFRRetriever::AXFRRetriever(const int fd, bool issocket)
+AXFRRetriever::AXFRRetriever(const int fd, bool tcp)
 {
   d_sock=dup(fd);
   if(d_sock==-1)
@@ -314,7 +314,7 @@ AXFRRetriever::AXFRRetriever(const int fd, bool issocket)
 
   d_buf = shared_array<char>(new char[65536]);
   d_soacount = 0;
-  d_sockissocket = issocket;
+  d_tcp = issocket;
 
   int res = waitForData(d_sock, 10, 0);
 
@@ -346,7 +346,7 @@ AXFRRetriever::AXFRRetriever(const ComboAddress& remote,
   d_sock = -1;
   try {
     d_sock = makeQuerySocket(local, false); // make a TCP socket
-    d_sockissocket = true;
+    d_tcp = true;
     d_buf = shared_array<char>(new char[65536]);
     d_remote = remote; // mostly for error reporting
     this->connect();
@@ -487,7 +487,7 @@ void AXFRRetriever::timeoutReadn(uint16_t bytes)
   while(n<bytes) {
     if(waitForData(d_sock, 10-(time(0)-start))<0)
       throw ResolverException("Reading data from remote nameserver over TCP: "+stringerror());
-    if(d_sockissocket)
+    if(d_tcp)
       numread=recv(d_sock, d_buf.get()+n, bytes-n, 0);
     else
       numread=read(d_sock, d_buf.get()+n, bytes-n);
