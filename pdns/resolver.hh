@@ -96,7 +96,7 @@ class AXFRRetriever : public boost::noncopyable
 	~AXFRRetriever();
     int getChunk(Resolver::res_t &res, bool ignoresoacount=false);  
   
-  protected:
+  private:
     void connect();
     int getLength();
     void timeoutReadn(uint16_t bytes);  
