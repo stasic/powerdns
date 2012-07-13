@@ -10,6 +10,12 @@ ArgvMap& arg()
   return theArg;
 }
 
+/* usage: generate a server->client flow dump using a tool like tcpflow.
+   Then: flow2zone < 192.168.001.001.00053-192.168.001.002.12345
+   Output will be a list of records (akin to a zonefile) terminated by
+   a TCP exception (this means end of file).
+   For most AXFR pcaps, you will get 3 SOAs total. This is normal.
+ */
 int main(int argc, char **argv)
 try
 {
