@@ -20,6 +20,55 @@ bindwait ()
 	done
 }
 
+cleanlongtxt ()
+{
+  sed -e 's/"A very .*"/"shorter"/' < test.com > test.com.shorttxt
+}
+
+tonsd ()
+{
+	cat > nsd.conf << __EOF__
+server:
+	ip-address: 127.0.0.1@$port
+	database: ./nsd.db
+	zonesdir: .
+	username: ""
+__EOF__
+
+	cleanlongtxt
+	for zone in $(grep zone named.conf  | cut -f2 -d\")
+	do
+		ksk=$(ldns-keygen -a RSASHA256 -k $zone)
+		zsk=$(ldns-keygen -a RSASHA256 $zone)
+		if [ $zone = test.com ]
+		then
+			zonefile=test.com.shorttxt
+		else
+			zonefile=${zone}
+		fi
+
+		case $1 in
+			nsec)
+				ldns-signzone -f ${zone}.signed ${zonefile} $ksk $zsk
+				;;
+			nsec3)
+				ldns-signzone -n -a 1 -p -s abcd -t 1 -f ${zone}.signed ${zonefile} $ksk $zsk
+				;;
+			unsigned)
+				cp ${zonefile} ${zone}.signed
+				;;
+			*)
+				echo 'tonsd called with wrong param'
+				exit 1
+		esac
+		echo "" >> nsd.conf
+		echo "zone:" >> nsd.conf
+		echo "	name: \"${zone}\"" >> nsd.conf
+		echo "	zonefile: \"${zone}.signed\"" >> nsd.conf
+	done
+	nsdc -c nsd.conf rebuild
+}
+
 port=$1
 [ -z "$port" ] && port=5300
 context=$2
@@ -40,6 +89,7 @@ gpgsql-nodnssec gpgsql gpgsql-nsec3
 gsqlite3-nodnssec gsqlite3 gsqlite3-nsec3
 opendbx-sqlite3
 tinydns
+ext-nsd ext-nsd-nsec ext-nsd-nsec3
 
 add -presigned to any gmysql test (except narrow) to test 
 presigned operation
@@ -62,6 +112,23 @@ then
 fi
 
 case $context in
+		ext-nsd | ext-nsd-nsec | ext-nsd-nsec3)
+			case $context in
+				ext-nsd)
+					tonsd unsigned
+					extracontexts="extnsd"
+					;;
+				ext-nsd-nsec)
+					tonsd nsec
+	                extracontexts="extnsd dnssec"
+	                ;;
+	            ext-nsd-nsec3)
+					tonsd nsec3
+					extracontexts="extnsd dnssec nsec3"
+				;;
+			esac
+			nsd -c nsd.conf -P pdns.pid -d &
+			;;
 		bind)
 			$RUNWRAPPER ../pdns/pdns_server --daemon=no --local-port=$port --socket-dir=./  \
 				--no-shuffle --launch=bind --bind-config=./named.conf                \
