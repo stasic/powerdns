@@ -55,10 +55,11 @@ do
 			[ -e "$a/expected_result.$extracontext" ] && expected=$a/expected_result.$extracontext
 		done
 		[ -n "$context" ] && [ -e "$a/expected_result.$context" ] && expected=$a/expected_result.$context
-		diff -u $expected $a/real_result > $a/diff 2>&1
-		if [ $? -gt 0 ]
+		if [ -e $expected ]
 		then
-			echo "diff failed, full result follows" >> $a/diff
+			diff -U 100 $expected $a/real_result > $a/diff 2>&1
+		else
+			echo "no expected_result file, full result follows" >> $a/diff
 			cat $a/real_result >> $a/diff
 		fi
 		if [ -s $a/diff ] 
