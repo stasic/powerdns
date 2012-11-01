@@ -13709,6 +13709,10 @@ To enable a Lua script for a particular slave zone, determine the domain_id for 
 	    <listitem><para>
 		Amount of logging. Higher is more. Do not set below 3
 	      </para></listitem></varlistentry>
+	  <varlistentry><term>log-dns-queries [,=no]</term>
+	    <listitem><para>
+Tell PowerDNS to log all incoming DNS queries. This will lead to a lot of logging! Only enable for debugging!
+	      </para></listitem></varlistentry>
 	  <varlistentry><term>master [,=on].</term>
 	    <listitem><para>
 	    Turn on master support. Boolean.
@@ -13807,6 +13811,14 @@ To enable a Lua script for a particular slave zone, determine the domain_id for 
 	  <varlistentry><term>slave-cycle-interval=60</term>
 	    <listitem><para>
 	      Schedule slave up-to-date checks of domains whose status is unknown every .. seconds.
+	      </para></listitem></varlistentry>
+	  <varlistentry><term>slave-renotify [,=no]</term>
+	    <listitem><para>
+This setting will make PowerDNS renotify the after a AXFR is *received* from a master. This is useful when using when running a signing-slave.
+	      </para></listitem></varlistentry>
+	  <varlistentry><term>signing-threads=3</term>
+	    <listitem><para>
+		Tell PowerDNS how many threads to use for signing. It might help improve signing speed by changing this number.
 	      </para></listitem></varlistentry>
 	  <varlistentry><term>smtpredirector=...</term>
 	    <listitem><para>
