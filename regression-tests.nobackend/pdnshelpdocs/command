@@ -27,6 +27,10 @@ for line in pdns.stderr:
 		varname = line[4:].split('=')[0].split()[0]
 		pdnsvars.add(varname)
 
+pdnsvars.remove('config')
+pdnsvars.remove('list-modules')
+pdnsvars.remove('version')
+
 print "variables in pdns_server --help but not in pdns.xml:"
 print '\n'.join(sorted(pdnsvars-docvars))
 print
