@@ -27,12 +27,10 @@ for line in pdns.stderr:
 		varname = line[4:].split('=')[0].split()[0]
 		pdnsvars.add(varname)
 
-if pdnsvars-docvars:
-	print "variables in pdns_server --help but not in pdns.xml:"
-	print '\n'.join(sorted(pdnsvars-docvars))
-	print
+print "variables in pdns_server --help but not in pdns.xml:"
+print '\n'.join(sorted(pdnsvars-docvars))
+print
 
-if docvars-pdnsvars:
-	print "variables in pdns.xml but not in pdns_server --help:"
-	print '\n'.join(sorted(docvars-pdnsvars))
-	print
+print "variables in pdns.xml but not in pdns_server --help:"
+print '\n'.join(sorted(docvars-pdnsvars))
+print
