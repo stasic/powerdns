@@ -56,6 +56,8 @@ marvin.example.net.      3600 IN NS  ns.marvin.example.net.
 ns.marvin.example.net.   3600 IN A   $PREFIX.15
 trillian.example.net.    3600 IN NS  ns.trillian.example.net.
 ns.trillian.example.net. 3600 IN A   $PREFIX.16
+xboxlive.example.net.    3600 IN NS  ns.xboxlive.example.net.
+ns.xboxlive.example.net. 3600 IN A   $PREFIX.17
 EOF
 
 mkdir $PREFIX.11
@@ -99,7 +101,7 @@ mkdir $PREFIX.15
 cat > $PREFIX.15/marvin.example.net.zone <<EOF
 marvin.example.net.          3600    IN  SOA $SOA
 marvin.example.net.          3600    IN  NS  ns.marvin.example.net.
-ns.marvin.example.net.   3600 IN A   $PREFIX.15
+ns.marvin.example.net.       3600 IN A   $PREFIX.15
 www.marvin.example.net.      3600    IN  CNAME   android.marvin.example.net.
 android.marvin.example.net.  3600    IN  A   192.0.2.5
 EOF
@@ -145,6 +147,41 @@ function prequery ( dnspacket )
 end
 EOF
 
+### delegation with one NXDOMAINing server in parent, one server in glue
+mkdir $PREFIX.17
+cat > $PREFIX.17/xboxlive.example.net.zone <<EOF
+xboxlive.example.net.            3600 IN SOA $SOA
+xboxlive.example.net.            3600 IN NS  ns.trillian.example.net.
+ns.xboxlive.example.net.         3600 IN A   $PREFIX.17
+gtm.xboxlive.example.net.        3600 IN NS  ns.gtm.xboxlive.example.net.
+gtm.xboxlive.example.net.        3600 IN NS  nxdomain.xboxlive.example.net.
+ns.gtm.xboxlive.example.net.     3600 IN A   $PREFIX.18
+EOF
+
+### receiver of delegation from .17; has extra NS compared to delegation
+mkdir $PREFIX.18
+cat > $PREFIX.18/gtm.xboxlive.example.net.zone <<EOF
+gtm.xboxlive.example.net.        3600 IN SOA $SOA
+gtm.xboxlive.example.net.        3600 IN NS  ns.gtm.xboxlive.example.net.
+gtm.xboxlive.example.net.        3600 IN NS  ns2.gtm.xboxlive.example.net.
+xeas.gtm.xboxlive.example.net.   3600 IN A   192.0.2.7
+EOF
+
+cat > $PREFIX.18/prequery.lua <<EOF
+function prequery ( dnspacket )
+    qname, qtype = dnspacket:getQuestion()
+    if qtype == pdns.A and qname == "xeas.gtm.xboxlive.example.net"
+    then
+        dnspacket:setRcode(pdns.NXDOMAIN)
+        ret = {}
+        ret[1] = {qname=qname, qtype=pdns.CNAME, content="www2.arthur.example.net", place=1}
+        ret[2] = {qname="", qtype=pdns.SOA, content="$SOA", place=2}
+        dnspacket:addRecords(ret)
+        return true
+    end
+    return false
+end
+EOF
 
 for dir in $PREFIX.*
 do
@@ -179,3 +216,6 @@ EOF
     ln -s ../run-auth $dir/run
 done
 
+cat > recursor-service/recursor.conf << EOF
+socket-dir=$(pwd)/recursor-service
+EOF

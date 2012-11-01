@@ -1,0 +1,11 @@
+## FIXME: this test does not actually work within the test suite
+## because the forward-zones override the faulty behaviour
+## perhaps we need root hints..
+
+0	xeas.gtm.xboxlive.example.net.	IN	A	3600	192.0.2.7
+Rcode: 0, RD: 1, QR: 1, TC: 0, AA: 0, opcode: 0
+Reply to question for qname='xeas.gtm.xboxlive.example.net.', qtype=A
+wiped 2 records, 0 negative records
+0	xeas.gtm.xboxlive.example.net.	IN	A	3600	192.0.2.7
+Rcode: 0, RD: 1, QR: 1, TC: 0, AA: 0, opcode: 0
+Reply to question for qname='xeas.gtm.xboxlive.example.net.', qtype=A
