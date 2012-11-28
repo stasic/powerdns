@@ -68,6 +68,8 @@ void loadMainConfig(const std::string& configdir)
   ::arg().laxFile(configname.c_str());
   ::arg().set("max-ent-entries", "Maximum number of empty non-terminals in a zone")="100000";
   ::arg().set("module-dir","Default directory for modules")=LIBDIR;
+  ::arg().setSwitch("direct-dnskey","EXPERIMENTAL: fetch DNSKEY RRs from backend during DNSKEY synthesis")="no";
+
   BackendMakers().launch(::arg()["launch"]); // vrooooom!
   ::arg().laxFile(configname.c_str());    
   //cerr<<"Backend: "<<::arg()["launch"]<<", '" << ::arg()["gmysql-dbname"] <<"'" <<endl;
@@ -91,7 +93,7 @@ void loadMainConfig(const std::string& configdir)
   ::arg().set("soa-expire-default","Default SOA expire")="604800";
   ::arg().setSwitch("query-logging","Hint backends that queries should be logged")="no";
   ::arg().set("soa-minimum-ttl","Default SOA minimum ttl")="3600";    
-  
+
   UeberBackend::go();
 }
 
@@ -99,12 +101,12 @@ void loadMainConfig(const std::string& configdir)
 // I think this has to do with interlocking transactions between B and DK, but unsure.
 void rectifyZone(DNSSECKeeper& dk, const std::string& zone)
 {
-  scoped_ptr<UeberBackend> B(new UeberBackend("default"));
+  UeberBackend B("default");
   bool doTransaction=true; // but see above
   SOAData sd;
   sd.db = (DNSBackend*)-1;
   
-  if(!B->getSOA(zone, sd)) {
+  if(!B.getSOA(zone, sd)) {
     cerr<<"No SOA known for '"<<zone<<"', is such a zone in the database?"<<endl;
     return;
   } 
@@ -252,10 +254,10 @@ void rectifyZone(DNSSECKeeper& dk, const std::string& zone)
 
 void rectifyAllZones(DNSSECKeeper &dk) 
 {
-  scoped_ptr<UeberBackend> B(new UeberBackend("default"));
+  UeberBackend B("default");
   vector<DomainInfo> domainInfo;
 
-  B->getAllDomains(&domainInfo);
+  B.getAllDomains(&domainInfo);
   BOOST_FOREACH(DomainInfo di, domainInfo) {
     cerr<<"Rectifying "<<di.zone<<": ";
     rectifyZone(dk, di.zone);
@@ -263,11 +265,11 @@ void rectifyAllZones(DNSSECKeeper &dk)
   cout<<"Rectified "<<domainInfo.size()<<" zones."<<endl;
 }
 
-int checkZone(UeberBackend *B, const std::string& zone)
+int checkZone(DNSSECKeeper &dk, UeberBackend &B, const std::string& zone)
 {
   SOAData sd;
   sd.db=(DNSBackend*)-1;
-  if(!B->getSOA(zone, sd)) {
+  if(!B.getSOA(zone, sd)) {
     cout<<"No SOA for zone '"<<zone<<"'"<<endl;
     return -1;
   } 
@@ -290,6 +292,26 @@ int checkZone(UeberBackend *B, const std::string& zone)
       cout<<"[Error] NSEC or NSEC3 found at '"<<rr.qname<<"'. These do not belong in the database."<<endl;
       numerrors++;
       continue;
+    }
+
+    if(rr.qtype.getCode() == QType::DNSKEY)
+    {
+      if(!dk.isPresigned(zone))
+      {
+        if(::arg().mustDo("direct-dnskey"))
+        {
+          if(rr.ttl != sd.default_ttl)
+          {
+            cout<<"[Warning] DNSKEY TTL of "<<rr.ttl<<" at '"<<rr.qname<<"' differs from SOA minimum of "<<sd.default_ttl<<endl;
+            numwarnings++;
+          }
+        }
+        else
+        {
+          cout<<"[Error] DNSKEY in non-presigned zone will mostly be ignored and can cause problems."<<endl;
+          numerrors++;
+        }
+      }
     }
 
     if(rr.qtype.getCode() == QType::SOA)
@@ -343,15 +365,15 @@ int checkZone(UeberBackend *B, const std::string& zone)
   return numerrors;
 }
 
-int checkAllZones() 
+int checkAllZones(DNSSECKeeper &dk) 
 {
-  scoped_ptr<UeberBackend> B(new UeberBackend("default"));
+  UeberBackend B("default");
   vector<DomainInfo> domainInfo;
 
-  B->getAllDomains(&domainInfo);
+  B.getAllDomains(&domainInfo);
   int errors=0;
   BOOST_FOREACH(DomainInfo di, domainInfo) {
-    if (checkZone(B.get(), di.zone) > 0) 
+    if (checkZone(dk, B, di.zone) > 0) 
        errors++;
   }
   cout<<"Checked "<<domainInfo.size()<<" zones, "<<errors<<" had errors."<<endl;
@@ -792,11 +814,11 @@ try
       cerr << "Syntax: pdnssec check-zone ZONE"<<endl;
       return 0;
     }
-    scoped_ptr<UeberBackend> B(new UeberBackend("default"));
-    exit(checkZone(B.get(), cmds[1]));
+    UeberBackend B("default");
+    exit(checkZone(dk, B, cmds[1]));
   }
   else if (cmds[0] == "check-all-zones") {
-    exit(checkAllZones());
+    exit(checkAllZones(dk));
   }
   else if (cmds[0] == "test-zone") {
     cerr << "Did you mean check-zone?"<<endl;
