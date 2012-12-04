@@ -15,6 +15,7 @@
     Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 #include "utility.hh"
+#include "dynlistener.hh"
 #include "ws.hh"
 #include "json.hh"
 #include "webserver.hh"
@@ -29,6 +30,10 @@
 #include <boost/foreach.hpp>
 #include "namespaces.hh"
 #include "rapidjson/document.h"
+#include "rapidjson/stringbuffer.h"
+#include "rapidjson/writer.h"
+
+using namespace rapidjson;
 
 extern StatBag S;
 
@@ -273,43 +278,44 @@ string StatWebServer::jsonstat(const string& method, const string& post, const m
 
     string variable, value;
     
-    ret+="{";
+    Document doc;
+    doc.SetObject();
     for(varmap_t::const_iterator iter = ourvarmap.begin(); iter != ourvarmap.end() ; ++iter) {
-      if(iter != ourvarmap.begin())
-        ret += ",";
-      
       variable = iter->first;
       if(variable == "version") {
-        value = '"'+string(VERSION)+'"';
+        value =VERSION;
       }
       else if(variable == "uptime") {
         value = lexical_cast<string>(time(0) - s_starttime);
       }
       else 
         value = lexical_cast<string>(S.read(variable));
-      
-        ret += '"'+ variable +"\": "+ value;
+      Value jval;
+      jval.SetString(value.c_str(), value.length(), doc.GetAllocator());
+      doc.AddMember(variable.c_str(), jval, doc.GetAllocator());
     }
-    ret+="}";
+    ret+=makeStringFromDocument(doc);
   }
  
   if(command=="config") {
     vector<string> items = ::arg().list();
-    ret += "[";
-    bool first=1;
+    Document doc;
+    doc.SetArray();
     BOOST_FOREACH(const string& var, items) {
+      Value kv, key, value;
+      kv.SetArray();
+      key.SetString(var.c_str(), var.length());
+      kv.PushBack(key, doc.GetAllocator());
       
-      if(!first) ret+=",";
-      first=false;
-      ret += "[";
-      ret += "\""+var+"\", \"";
       if(var.find("password") != string::npos)
-        ret += "*****\"";
+        value="*****";
       else 
-        ret += ::arg()[var] + "\"";
-      ret += "]";
+        value.SetString(::arg()[var].c_str(), ::arg()[var].length(), doc.GetAllocator());
+      
+      kv.PushBack(value, doc.GetAllocator());
+      doc.PushBack(kv, doc.GetAllocator());
     }
-    ret += "]";
+    ret += makeStringFromDocument(doc);
   }
 
   if(command == "flush-cache") {
@@ -322,7 +328,7 @@ string StatWebServer::jsonstat(const string& method, const string& post, const m
       
     map<string, string> object;
     object["number"]=lexical_cast<string>(number);
-    cerr<<"Flushed cache for '"<<ourvarmap["domain"]<<"', cleaned "<<number<<" records"<<endl;
+    //cerr<<"Flushed cache for '"<<ourvarmap["domain"]<<"', cleaned "<<number<<" records"<<endl;
     ret += returnJSONObject(object);
   }
   if(command=="get-zone") {
@@ -352,6 +358,34 @@ string StatWebServer::jsonstat(const string& method, const string& post, const m
     }
 
     ret += "]";
+  }
+  if(command == "pdns-control") {
+    if(method!="POST") {
+      map<string, string> m;
+      m["error"]="pdns-control requires a POST";
+      return ret + returnJSONObject(m);
+    }
+    // cout<<"post: "<<post<<endl;
+    rapidjson::Document document;
+    if(document.Parse<0>(post.c_str()).HasParseError()) {
+      return ret+"{\"error\": \"Unable to parse JSON\"";
+    }
+    // cout<<"Parameters: '"<<document["parameters"].GetString()<<"'\n";
+    vector<string> parameters;
+    stringtok(parameters, document["parameters"].GetString(), " \t");
+    
+    DynListener::g_funk_t* ptr=0;
+    if(!parameters.empty())
+      ptr = DynListener::getFunc(toUpper(parameters[0]));
+    map<string, string> m;
+    
+    if(ptr) {
+      m["result"] = (*ptr)(parameters, 0);
+    } else {
+      m["error"]="No such function "+toUpper(parameters[0]);
+    }
+    ret+= returnJSONObject(m);
+      
   }
   if(command == "zone-rest") { // http://jsonstat?command=zone-rest&rest=/powerdns.nl/www.powerdns.nl/a
     vector<string> parts;
@@ -405,7 +439,6 @@ string StatWebServer::jsonstat(const string& method, const string& post, const m
         return ret+"{\"error\": \"Unable to parse JSON\"";
       }
       
-    
       DNSResourceRecord rr;
       vector<DNSResourceRecord> rrset;
       const rapidjson::Value &records= document["records"];
@@ -443,7 +476,7 @@ string StatWebServer::jsonstat(const string& method, const string& post, const m
     }  
   }
   if(command=="log-grep") {
-    ret += makeLogGrepJSON(ourvarmap, ::arg()["logfile"], " pdns[");
+    ret += makeLogGrepJSON(ourvarmap, ::arg()["experimental-logfile"], " pdns[");
   }
  
   const char *kinds[]={"Master", "Slave", "Native"};
@@ -451,21 +484,29 @@ string StatWebServer::jsonstat(const string& method, const string& post, const m
     UeberBackend B;
     vector<DomainInfo> domains;
     B.getAllDomains(&domains);
-    ret += "{ \"domains\": [ ";
-    bool first=true;
-    BOOST_FOREACH(DomainInfo& di, domains) {
-      if(!first) ret+=", ";
-      first=false;
-      
-      ret += "{ \"name\": \"";
-      ret += di.zone +"\", \"kind\": \""+ kinds[di.kind]+"\", \"masters\": \"";
-      BOOST_FOREACH(const string& master, di.masters) {
-        ret += master+ " ";
-      }
-      ret+="\", \"serial\": "+lexical_cast<string>(di.serial)+", \"notified_serial\": "+lexical_cast<string>(di.notified_serial)+", \"last_check\": "+lexical_cast<string>(di.last_check);
-      ret+=" }";
+    
+    Document doc;
+    doc.SetObject();
+    
+    Value jdomains;
+    jdomains.SetArray();
+    
+    BOOST_FOREACH(const DomainInfo& di, domains) {
+      Value jdi;
+      jdi.SetObject();
+      jdi.AddMember("name", di.zone.c_str(), doc.GetAllocator());
+      jdi.AddMember("kind", kinds[di.kind], doc.GetAllocator());
+      string masters = boost::join(di.masters, " ");
+      Value jmasters;
+      jmasters.SetString(masters.c_str(), masters.size(), doc.GetAllocator());
+      jdi.AddMember("masters", jmasters, doc.GetAllocator()); // ^^^ this makes an actual copy, otherwise the zerocopy behaviour bites us!
+      jdi.AddMember("serial", di.serial, doc.GetAllocator());
+      jdi.AddMember("notified_serial", di.notified_serial, doc.GetAllocator());
+      jdi.AddMember("last_check", di.last_check, doc.GetAllocator());
+      jdomains.PushBack(jdi, doc.GetAllocator());
     }
-    ret+= "]}";
+    doc.AddMember("domains", jdomains, doc.GetAllocator());
+    ret.append(makeStringFromDocument(doc));
   }
   
   if(!callback.empty()) {
@@ -479,7 +520,7 @@ void StatWebServer::launch()
   try {
     d_ws->setCaller(this);
     d_ws->registerHandler("",&indexfunction);
-    if(::arg().mustDo("json-interface"))
+    if(::arg().mustDo("experimental-json-interface"))
       d_ws->registerHandler("jsonstat", &jsonstat);
     d_ws->go();
   }
