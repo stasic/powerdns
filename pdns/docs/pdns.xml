@@ -11147,6 +11147,12 @@ create index recordorder on records (domain_id, ordername text_pattern_ops);
 
 		Additionally, with 3.2 supporting empty non-terminals (see <xref linkend="dnssec-direct-database" />), your frontend may need some changes.
 	</para>
+	<para>
+		Due to a bug, in 3.1 and earlier releases, the pipebackend would default to a 1000 second timeout for
+		responses from scripts, instead of the intended and documented 1000 milliseconds (1 second). In 3.2,
+		pipe-timeout is in fact in milliseconds. To avoid some surprise, the default is now 2000 (2 seconds). If you
+		have slow pipebackend scripts, make sure to increase pipe-timeout.
+	</para>
   </sect1>
 
   </chapter>
@@ -17955,7 +17961,8 @@ record building scripts on his <ulink url="http://anders.com/projects/sysadmin/d
       </para>
      <sect2 id="remotebackend-compiling"><title>Compiling</title>
         <para>
-        Install following libraries for dependencies: libjsoncpp, libcurl. To compile this backend, you need to configure --with-modules="remote pipe", for now.
+        Install following libraries for dependencies: libjsoncpp. To compile this backend, you need to configure --with-modules="remote pipe", for
+        now. If you want to use http connector, you need libcurl and use --enable-remotebackend-http. 
       </para>
       </sect2>
       <sect2 id="remotebackend-usage"><title>Usage</title>
@@ -17970,11 +17977,12 @@ remote-connection-string=&lt;type&gt;:&lt;param&gt;=&lt;value&gt;,&lt;param&gt;=
         <para>
           You can pass as many parameters as you want. For unix and pipe backends, these
           are passed along to the remote end as initialization. See <xref linkend="remotebackend-api" />.
+          Initialize is not called for http backend. 
         </para>
 
       <sect3 id="remotebackend-unix"><title>Unix backend</title>
         <para>
-          parameters: path 
+          parameters: path, timeout (default 2000ms)
         </para>
         <para>
           <programlisting>
@@ -17985,11 +17993,11 @@ remote-connection-string=unix:path=/path/to/socket
 
             <sect3 id="remotebackend-pipe"><title>Pipe backend</title>
         <para>
-          parameters: command 
+          parameters: command,timeout (default 2000ms)
         </para>
         <para>
           <programlisting>
-remote-connection-string=unix:command=/path/to/executable
+remote-connection-string=unix:command=/path/to/executable,timeout=2000
 </programlisting>
         </para>
       </sect3>
@@ -17997,7 +18005,7 @@ remote-connection-string=unix:command=/path/to/executable
 
       <sect3 id="remotebackend-HTTP"><title>HTTP backend</title>
         <para>
-          parameters: url, url-suffix
+          parameters: url, url-suffix, timeout (default 2000)
         </para>
         <para>
           HTTP backend tries to do RESTful requests to your server. See examples.
@@ -18005,10 +18013,11 @@ remote-connection-string=unix:command=/path/to/executable
         <para>
           URL should not end with /, and url-suffix is optional, but if you define it, it's
           up to you to write the ".php" or ".json". Lack of dot causes lack of dot in
-          URL. 
+          URL. Timeout is divided by 1000 because libcurl only supports seconds, but this is
+          given in milliseconds for consistency with other backends. 
         </para>
       </sect3>
-		</sect2>
+      </sect2>
 
       <sect2 id="remotebackend-api"><title>API</title>
         <sect3 id="remotebackend-api-queries"><title>Queries</title>
@@ -18033,6 +18042,46 @@ remote-connection-string=unix:command=/path/to/executable
           </para>
         </sect3>
         <sect3 id="remotebackend-api-methods"><title>Methods</title>
+
+<sect4 id="remotebackend-api-methods-initialize"><title>Method: initialize</title>
+<variablelist>
+ <varlistentry>
+   <term>Mandatory:</term>
+   <listitem><para>Yes (except HTTP backend)</para></listitem>
+ </varlistentry>
+ <varlistentry>
+   <term>Parameters:</term>
+   <listitem><para>all parameters in connection string</para></listitem>
+ </varlistentry>
+ <varlistentry>
+   <term>Reply:</term>
+   <listitem><para>true on success / false on failure</para></listitem>
+ </varlistentry>
+ <varlistentry>
+  <term>Description</term>
+  <listitem><para>Called to initialize the backend. This is not called for HTTP backend. You should
+do your initializations here.</para></listitem>
+ </varlistentry>
+ <varlistentry>
+  <term>Example JSON/RPC:</term>
+<listitem>
+<para>
+Query:
+<programlisting>
+{"method":"initialize", "parameters":{"command":"/path/to/something", "timeout":"2000", "something":"else"}}
+</programlisting>
+</para>
+<para>
+Response:
+<programlisting>
+{"result":true}
+</programlisting>
+</para>
+</listitem>
+ </varlistentry>
+</variablelist>
+</sect4>
+
 <sect4 id="remotebackend-api-methods-lookup"><title>Method: lookup</title>
 <variablelist>
  <varlistentry>
@@ -19246,6 +19295,76 @@ Reply:
 	problems though.
       </para>
   </sect1>
+  <sect1 id="adding-rr-types"><title>Adding new DNS record types</title>
+  <para>
+	Here are the full descriptions on how we added the TLSA record type to all PowerDNS products, with links to the actual source code.
+  </para>
+  <para>
+	First, define the TLSARecordContent class in <ulink url="http://wiki.powerdns.com/trac/browser/trunk/pdns/pdns/dnsrecords.hh?rev=2338#L307">dnsrecords.hh</ulink>:
+  </para>
+
+<screen>
+class TLSARecordContent : public DNSRecordContent
+{
+public:
+  includeboilerplate(TLSA) 
+  uint8_t d_certusage, d_selector, d_matchtype;
+  string d_cert;
+};
+</screen>
+
+<para>
+The 'includeboilerplate(TLSA)' generates the four methods that do everything PowerDNS would ever want to do with a record:
+<itemizedlist>
+	<listitem>
+		<para>
+			read TLSA records from zonefile format
+		</para>
+	</listitem>
+	<listitem>
+		<para>
+write out a TLSA record in zonefile format
+		</para>
+	</listitem>
+	<listitem>
+		<para>
+read a TLSA record from a packet
+		</para>
+	</listitem>
+	<listitem>
+		<para>
+write a TLSA record to a packet
+		</para>
+	</listitem>
+</itemizedlist>
+</para>
+<para>
+The <ulink url="http://wiki.powerdns.com/trac/browser/trunk/pdns/pdns/dnsrecords.cc?rev=2638#L226">actual parsing code</ulink>:
+</para>
+<screen>
+boilerplate_conv(TLSA, 52,
+                 conv.xfr8BitInt(d_certusage);
+                 conv.xfr8BitInt(d_selector);
+                 conv.xfr8BitInt(d_matchtype);
+                 conv.xfrHexBlob(d_cert, true);
+                 )
+</screen>
+
+<para>
+	This code defines the TLSA rrtype number as 52. Secondly, it says there are 3 eight bit fields for Certificate Usage, Selector and Match type. Next, it defines that the rest of the record is the actual certificate (hash). <ulink url="http://wiki.powerdns.com/trac/browser/trunk/pdns/pdns/dnsparser.hh?rev=2338#L70">'conv'</ulink> methods are supplied for all DNS data types in use.
+</para>
+
+<para>
+Now add TLSRecordContent::report() to <ulink url="http://wiki.powerdns.com/trac/browser/trunk/pdns/pdns/dnsrecords.cc?rev=2338#L364">reportOtherTypes()</ulink>.
+</para>
+
+<para>
+	And that's it. For completeness, add TLSA and 52 to the QType enum in qtype.hh, which makes it easier to refer to the TLSA record in code if so required.
+</para>
+  </sect1>
+
+
+
   </appendix>
   <appendix id="backend-writers-guide"><title>Backend writers' guide</title>
     <para>

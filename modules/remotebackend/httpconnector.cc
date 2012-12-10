@@ -3,19 +3,28 @@
 #include <unistd.h>
 #include <sys/select.h>
 #include <fcntl.h>
-#include <curl/curl.h>
 #include <boost/foreach.hpp>
 #include <sstream>
+
+#ifdef REMOTEBACKEND_HTTP
+#include <curl/curl.h>
+#endif
+
 #ifndef UNIX_PATH_MAX 
 #define UNIX_PATH_MAX 108
 #endif
 
+#ifdef REMOTEBACKEND_HTTP
 HTTPConnector::HTTPConnector(std::map<std::string,std::string> options) {
     this->d_url = options.find("url")->second;
     if (options.find("url-suffix") != options.end()) {
       this->d_url_suffix = options.find("url-suffix")->second;
     } else {
       this->d_url_suffix = "";
+    }
+    this->timeout = 2;
+    if (options.find("timeout") != options.end()) { 
+      this->timeout = boost::lexical_cast<int>(options.find("timeout")->second)/1000;
     }
 }
 
@@ -32,24 +41,32 @@ size_t httpconnector_write_data(void *buffer, size_t size, size_t nmemb, void *u
 }
 
 // converts json value into string
-void HTTPConnector::json2string(const Json::Value &input, std::string &output) {
-   if (input.isString()) output = input.asString();
-   else if (input.isNull()) output = "";
-   else if (input.isUInt()) output = lexical_cast<std::string>(input.asUInt());
-   else if (input.isInt()) output = lexical_cast<std::string>(input.asInt());
+void HTTPConnector::json2string(const rapidjson::Value &input, std::string &output) {
+   if (input.IsString()) output = input.GetString();
+   else if (input.IsNull()) output = "";
+   else if (input.IsUint()) output = lexical_cast<std::string>(input.GetUint());
+   else if (input.IsInt()) output = lexical_cast<std::string>(input.GetInt());
    else output = "inconvertible value";
 }
 
+void HTTPConnector::addUrlComponent(const rapidjson::Value &parameters, const char *element, std::stringstream& ss) {
+    rapidjson::Value nullval;
+    std::string sparam;
+    nullval.SetNull();
+    const rapidjson::Value& param = (parameters.HasMember(element)?parameters[element]:nullval);
+    if (param.IsNull() == false) {
+       json2string(param, sparam);
+       ss << "/" << sparam;
+    }
+}
+
+
 // builds our request
-void HTTPConnector::requestbuilder(const std::string &method, const Json::Value &parameters, struct curl_slist **slist)
+void HTTPConnector::requestbuilder(const std::string &method, const rapidjson::Value &parameters, struct curl_slist **slist)
 {
     std::stringstream ss;
-    Json::Value param;
     std::string sparam;
     char *tmpstr;
-
-    // check for certain elements
-    std::vector<std::string> members = parameters.getMemberNames();
 
     // special names are qname, name, zonename, kind, others go to headers
 
@@ -59,38 +76,18 @@ void HTTPConnector::requestbuilder(const std::string &method, const Json::Value 
 
     // add the url components, if found, in following order.
     // id must be first due to the fact that the qname/name can be empty
-    if ((param = parameters.get("id", Json::Value())).isNull() == false) {
-       json2string(param, sparam);
-       ss << "/" << sparam;
-    }
-    if ((param = parameters.get("zonename", Json::Value())).isNull() == false) {
-       json2string(param, sparam);
-       ss << "/" << sparam;
-    }
 
-    if ((param = parameters.get("qname", Json::Value())).isNull() == false) {
-       json2string(param, sparam);
-       ss << "/" << sparam;
-    }
-    
-    if ((param = parameters.get("name", Json::Value())).isNull() == false) {
-       json2string(param, sparam);
-       ss << "/" << sparam;
-    }
-
-    if ((param = parameters.get("kind", Json::Value())).isNull() == false) {
-       json2string(param, sparam);
-       ss << "/" << sparam;
-    }
-    if ((param = parameters.get("qtype", Json::Value())).isNull() == false) {
-       json2string(param, sparam);
-       ss << "/" << sparam;
-    }
+    addUrlComponent(parameters, "id", ss);
+    addUrlComponent(parameters, "zonename", ss);
+    addUrlComponent(parameters, "qname", ss);
+    addUrlComponent(parameters, "name", ss);
+    addUrlComponent(parameters, "kind", ss);
+    addUrlComponent(parameters, "qtype", ss);
 
     // finally add suffix
     ss << d_url_suffix;
     curl_easy_setopt(d_c, CURLOPT_URL, ss.str().c_str());
-
+    
     (*slist) = NULL;
     // set the correct type of request based on method
     if (method == "activateDomainKey" || method == "deactivateDomainKey") { 
@@ -100,9 +97,9 @@ void HTTPConnector::requestbuilder(const std::string &method, const Json::Value 
     } else if (method == "addDomainKey") {
         // create post with keydata
         std::stringstream ss2;
-        param = parameters["key"]; 
-        ss2 << "flags=" << param["flags"].asUInt() << "&active=" << (param["active"].asBool() ? 1 : 0) << "&content=";
-        tmpstr = curl_easy_escape(d_c, param["content"].asCString(), 0);
+        const rapidjson::Value& param = parameters["key"]; 
+        ss2 << "flags=" << param["flags"].GetUint() << "&active=" << (param["active"].GetBool() ? 1 : 0) << "&content=";
+        tmpstr = curl_easy_escape(d_c, param["content"].GetString(), 0);
         ss2 << tmpstr;
         sparam = ss2.str();
         curl_easy_setopt(d_c, CURLOPT_POSTFIELDSIZE, sparam.size());
@@ -112,12 +109,12 @@ void HTTPConnector::requestbuilder(const std::string &method, const Json::Value 
         int n=0;
         // copy all metadata values into post
         std::stringstream ss2;
-        param = parameters["value"];
+        const rapidjson::Value& param = parameters["value"];
         curl_easy_setopt(d_c, CURLOPT_POST, 1);
         // this one has values too
-        if (param.isArray()) {
-           for(Json::ValueIterator i = param.begin(); i != param.end(); i++) {
-              ss2 << "value" << (++n) << "=" << (*i).asString() << "&";
+        if (param.IsArray()) {
+           for(rapidjson::Value::ConstValueIterator i = param.Begin(); i != param.End(); i++) {
+              ss2 << "value" << (++n) << "=" << i->GetString() << "&";
            }
         }
         sparam = ss2.str();
@@ -132,15 +129,16 @@ void HTTPConnector::requestbuilder(const std::string &method, const Json::Value 
     }
 
     // put everything else into headers
-    BOOST_FOREACH(std::string member, members) {
+    for (rapidjson::Value::ConstMemberIterator iter = parameters.MemberBegin(); iter != parameters.MemberEnd(); ++iter) {
       char header[1024];
+      const char *member = iter->name.GetString();
       // these are not put into headers for obvious reasons
-      if (member == "zonename" || member == "qname" ||
-          member == "name" || member == "kind" ||
-          member == "qtype" || member == "id" ||
-          member == "key" ) continue;
+      if (!strncmp(member,"zonename",8) || !strncmp(member,"qname",5) ||
+          !strncmp(member,"name",4) || !strncmp(member,"kind",4) ||
+          !strncmp(member,"qtype",5) || !strncmp(member,"id",2) ||
+          !strncmp(member,"key",3)) continue;
       json2string(parameters[member], sparam);
-      snprintf(header, sizeof header, "X-RemoteBackend-%s: %s", member.c_str(), sparam.c_str());
+      snprintf(header, sizeof header, "X-RemoteBackend-%s: %s", iter->name.GetString(), sparam.c_str());
       (*slist) = curl_slist_append((*slist), header);
     };
 
@@ -148,7 +146,7 @@ void HTTPConnector::requestbuilder(const std::string &method, const Json::Value 
     curl_easy_setopt(d_c, CURLOPT_HTTPHEADER, *slist); 
 }
 
-int HTTPConnector::send_message(const Json::Value &input) {
+int HTTPConnector::send_message(const rapidjson::Document &input) {
     int rv;
     long rcode;
     struct curl_slist *slist;
@@ -160,11 +158,12 @@ int HTTPConnector::send_message(const Json::Value &input) {
     d_c = curl_easy_init();
     d_data = "";
     curl_easy_setopt(d_c, CURLOPT_NOSIGNAL, 1);
-    curl_easy_setopt(d_c, CURLOPT_TIMEOUT, 2);
+    curl_easy_setopt(d_c, CURLOPT_TIMEOUT, this->timeout);
+
     slist = NULL;
 
     // build request
-    requestbuilder(input["method"].asString(), input["parameters"], &slist);
+    requestbuilder(input["method"].GetString(), input["parameters"], &slist);
 
     // setup write function helper
     curl_easy_setopt(d_c, CURLOPT_WRITEFUNCTION, &(httpconnector_write_data));
@@ -193,14 +192,17 @@ int HTTPConnector::send_message(const Json::Value &input) {
     return rv;
 }
 
-int HTTPConnector::recv_message(Json::Value &output) {
-    Json::Reader r;
+int HTTPConnector::recv_message(rapidjson::Document &output) {
+    rapidjson::StringStream ss(d_data.c_str());
     int rv = -1;
+    output.ParseStream<0>(ss);
 
     // offer whatever we read in send_message
-    if (r.parse(d_data, output) == true)
+    if (output.HasParseError() == false)
        rv = d_data.size();
 
     d_data = ""; // cleanup here
     return rv;
 }
+
+#endif

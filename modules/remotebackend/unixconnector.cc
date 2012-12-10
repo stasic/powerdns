@@ -4,7 +4,6 @@
 #include <unistd.h>
 #include <sys/select.h>
 #include <fcntl.h>
-
 #ifndef UNIX_PATH_MAX 
 #define UNIX_PATH_MAX 108
 #endif
@@ -14,6 +13,10 @@ UnixsocketConnector::UnixsocketConnector(std::map<std::string,std::string> optio
      L<<Logger::Error<<"Cannot find 'path' option in connection string"<<endl;
      throw new AhuException();
    } 
+   this->timeout = 2000;
+   if (options.find("timeout") != options.end()) { 
+     this->timeout = boost::lexical_cast<int>(options.find("timeout")->second);
+   }
    this->path = options.find("path")->second;
    this->options = options;
    this->connected = false;
@@ -26,28 +29,30 @@ UnixsocketConnector::~UnixsocketConnector() {
    }
 }
 
-int UnixsocketConnector::send_message(const Json::Value &input) {
+int UnixsocketConnector::send_message(const rapidjson::Document &input) {
         std::string data;
-        Json::FastWriter writer;
         int rv;
-        data = writer.write(input);
+        data = makeStringFromDocument(input);
+        data = data + "\n";
         rv = this->write(data);
         if (rv == -1)
           return -1;
         return rv;
 }
 
-int UnixsocketConnector::recv_message(Json::Value &output) {
+int UnixsocketConnector::recv_message(rapidjson::Document &output) {
         int rv,nread;
         std::string s_output;
-        Json::Reader r;
-        time_t t0;
+        rapidjson::GenericReader<rapidjson::UTF8<> , rapidjson::MemoryPoolAllocator<> > r;
+
+        struct timeval t0,t;
 
         nread = 0;
-        t0 = time(NULL);
+        gettimeofday(&t0, NULL);
+        memcpy(&t,&t0,sizeof(t0));
         s_output = "";       
- 
-        while(time(NULL) - t0 < 2) { // 2 second timeout 
+
+        while((t.tv_sec - t0.tv_sec)*1000 + (t.tv_usec - t0.tv_usec)/1000 < this->timeout) { 
           std::string temp;
           temp.clear();
 
@@ -58,10 +63,12 @@ int UnixsocketConnector::recv_message(Json::Value &output) {
           if (rv>0) {
             nread += rv;
             s_output.append(temp);
-            if (r.parse(s_output,output)==true) {
-               return nread;
-            }
+            rapidjson::StringStream ss(s_output.c_str());
+            output.ParseStream<0>(ss); 
+            if (output.HasParseError() == false)
+              return s_output.size();
           }
+          gettimeofday(&t, NULL);
         }
 
         return -1;
@@ -114,7 +121,8 @@ void UnixsocketConnector::reconnect() {
    struct sockaddr_un sock;
    struct timeval tv;
    fd_set rd;
-   Json::Value init,res;
+   rapidjson::Document init,res;
+   rapidjson::Value val;
 
    if (connected) return; // no point reconnecting if connected...
    connected = true;
@@ -147,10 +155,16 @@ void UnixsocketConnector::reconnect() {
    }
    // send initialize
 
-   init["method"] = "initialize";
-   init["parameters"] = Json::Value();
-   for(std::map<std::string,std::string>::iterator i = options.begin(); i != options.end(); i++)
-      init["parameters"][i->first] = i->second;
+   init.SetObject();
+   val = "initialize";
+   init.AddMember("method",val, init.GetAllocator());
+   val.SetObject();
+   init.AddMember("parameters", val, init.GetAllocator());
+
+   for(std::map<std::string,std::string>::iterator i = options.begin(); i != options.end(); i++) {
+     val = i->second.c_str();
+     init["parameters"].AddMember(i->first.c_str(), val, init.GetAllocator());
+   } 
 
    this->send_message(init);
    if (this->recv_message(res) == false) {
