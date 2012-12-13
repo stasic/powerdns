@@ -29,6 +29,7 @@ SMySQL::SMySQL(const string &database, const string &host, uint16_t port, const 
   d_msocket = msocket;
   d_user = user;
   d_password = password;
+  d_group = group;
   d_timeout = timeout;
 
   d_connected=false;
@@ -47,7 +48,6 @@ void SMySQL::ensureConnect()
     Lock l(&s_myinitlock);
     mysql_init(&d_db);
     mysql_options(&d_db, MYSQL_READ_DEFAULT_GROUP, "client");
-    my_bool reconnect = 1;
 
 #if MYSQL_VERSION_ID >= 50013
     my_bool reconnect = 1;
@@ -60,11 +60,13 @@ void SMySQL::ensureConnect()
     mysql_options(&d_db, MYSQL_OPT_WRITE_TIMEOUT, &d_timeout);
 #endif
   
-    if (!mysql_real_connect(&d_db, d_host.empty() ? 0 : d_host.c_str(), 
-        		  d_user.empty() ? 0 : d_user.c_str(), 
-        		  d_password.empty() ? 0 : d_password.c_str(),
+    mysql_options(&d_db, MYSQL_READ_DEFAULT_GROUP, d_group.c_str());
+
+    if (!mysql_real_connect(&d_db, d_host.empty() ? NULL : d_host.c_str(), 
+        		  d_user.empty() ? NULL : d_user.c_str(), 
+        		  d_password.empty() ? NULL : d_password.c_str(),
         		  d_database.c_str(), d_port,
-        		  d_msocket.empty() ? 0 : d_msocket.c_str(),
+        		  d_msocket.empty() ? NULL : d_msocket.c_str(),
         		  CLIENT_MULTI_RESULTS)) {
 
       throw sPerrorException("Unable to connect to database");
