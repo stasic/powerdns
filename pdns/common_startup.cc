@@ -72,7 +72,6 @@ void declareArguments()
   ::arg().set("receiver-threads","Default number of Distributor (backend) threads to start")="1";
   ::arg().set("queue-limit","Maximum number of milliseconds to queue a query")="1500"; 
   ::arg().set("recursor","If recursion is desired, IP address of a recursing nameserver")="no"; 
-  ::arg().set("lazy-recursion","Only recurse if question cannot be answered locally")="yes";
   ::arg().set("allow-recursion","List of subnets that are allowed to recurse")="0.0.0.0/0";
   ::arg().set("pipebackend-abi-version","Version of the pipe backend ABI")="1";
   
@@ -231,12 +230,19 @@ void *qthread(void *number)
 
   unsigned int &numreceived6=*S.getPointer("udp6-queries");
   unsigned int &numanswered6=*S.getPointer("udp6-answers");
-  numreceived=-1;
+
   int diff;
   bool logDNSQueries = ::arg().mustDo("log-dns-queries");
+  bool skipfirst=true;
+  unsigned int maintcount = 0;
   for(;;) {
+    if (skipfirst)
+      skipfirst=false;
+    else  
+      numreceived++;
+
     if(number==0) { // only run on main thread
-      if(!((numreceived++)%250)) { // maintenance tasks
+      if(!((maintcount++)%250)) { // maintenance tasks
         S.set("latency",(int)avg_latency);
         int qcount, acount;
         distributor->getQueueSizes(qcount, acount);
@@ -344,7 +350,6 @@ void mainthread()
   dl->go();
 
   pthread_t qtid;
-
 
   if(::arg().mustDo("webserver"))
     sws.go();
