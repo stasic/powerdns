@@ -127,6 +127,11 @@ bool RecursorLua::passthrough(const string& func, const ComboAddress& remote, co
     lua_pushnumber(d_lua, res);
     extraParameter+=2;
   }
+  else if(!strcmp(func.c_str(),"nxdomain")) {
+    pushResourceRecordsTable(d_lua, ret);
+    lua_pushnumber(d_lua, res);
+    extraParameter+=2;
+  }
 
   if(lua_pcall(d_lua,  3 + extraParameter, 3, 0)) { 
     string error=string("lua error in '"+func+"' while processing query for '"+query+"|"+qtype.getName()+": ")+lua_tostring(d_lua, -1);
