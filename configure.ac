@@ -1,6 +1,6 @@
 dnl intro
 AC_INIT(pdns/receiver.cc)
-AM_INIT_AUTOMAKE(pdns, 3.2-rc3)
+AM_INIT_AUTOMAKE(pdns, 3.2-rc4)
 AC_CANONICAL_HOST
 AM_CONFIG_HEADER(config.h)
 AC_C_BIGENDIAN 
@@ -80,7 +80,7 @@ AC_STRUCT_TM
 
 dnl Checks for library functions.
 AC_TYPE_SIGNAL
-AC_CHECK_FUNCS(gethostname gettimeofday mkdir mktime select socket strerror)
+AC_CHECK_FUNCS(gethostname gettimeofday mkdir mktime select socket strerror strcasestr)
 
 # Check for libdl
 
