@@ -769,7 +769,6 @@ try
     cerr<<"unset-nsec3 ZONE                   Switch back to NSEC\n";
     cerr<<"unset-presigned ZONE               No longer use presigned RRSIGs\n";
     cerr<<"test-schema ZONE                   Test DB schema - will create ZONE\n\n";
-    cerr<<"Options:"<<endl;
     cerr<<desc<<endl;
     return 0;
   }
@@ -1082,7 +1081,7 @@ try
   }  
   else if(cmds[0]=="import-zone-key-pem") {
     if(cmds.size() < 4) {
-      cerr<<"Syntax: pdnssec import-zone-key ZONE FILE algorithm [zsk|ksk]"<<endl;
+      cerr<<"Syntax: pdnssec import-zone-key ZONE FILE algorithm [ksk|zsk]"<<endl;
       exit(1);
     }
     string zone=cmds[1];
@@ -1126,8 +1125,8 @@ try
     
   }
   else if(cmds[0]=="import-zone-key") {
-    if(cmds.size() < 4) {
-      cerr<<"Syntax: pdnssec import-zone-key ZONE FILE [zsk|ksk]"<<endl;
+    if(cmds.size() < 3) {
+      cerr<<"Syntax: pdnssec import-zone-key ZONE FILE [ksk|zsk]"<<endl;
       exit(1);
     }
     string zone=cmds[1];
