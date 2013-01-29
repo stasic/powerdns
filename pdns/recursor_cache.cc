@@ -190,6 +190,7 @@ void MemRecursorCache::replace(time_t now, const string &qname, const QType& qt,
   d_cachecachevalid=false;
   tuple<string, uint16_t> key=make_tuple(qname, qt.getCode());
   cache_t::iterator stored=d_cache.find(key);
+  uint32_t maxTTD=UINT_MAX;
 
   bool isNew=false;
   if(stored == d_cache.end()) {
@@ -222,9 +223,18 @@ void MemRecursorCache::replace(time_t now, const string &qname, const QType& qt,
     }
   }
   
+  // limit TTL of auth->auth NSset update if needed, except for root
+  if(ce.d_auth && auth && qt.getCode()==QType::NS && !((qname.length()==1 && qname[0]=='.'))) {
+    // cerr<<"\tLimiting TTL of auth->auth NS set replace"<<endl;
+    vector<StoredRecord>::iterator j;
+    for(j = ce.d_records.begin() ; j != ce.d_records.end(); ++j) {
+      maxTTD=min(maxTTD, j->d_ttd);
+    }      
+  }
+
   // make sure that we CAN refresh the root
   if(auth && ((qname.length()==1 && qname[0]=='.') || !attemptToRefreshNSTTL(qt, content, ce) ) ) {
-    // cerr<<"\tGot auth data, and it was not refresh attempt of an NS record, nuking storage"<<endl;
+    // cerr<<"\tGot auth data, and it was not refresh attempt of an unchanged NS set, nuking storage"<<endl;
     ce.d_records.clear(); // clear non-auth data
     ce.d_auth = true;
     isNew=true;           // data should be sorted again
@@ -234,8 +244,8 @@ void MemRecursorCache::replace(time_t now, const string &qname, const QType& qt,
 
   // cerr<<"\tHave "<<content.size()<<" records to store\n";
   for(set<DNSResourceRecord>::const_iterator i=content.begin(); i != content.end(); ++i) {
-    // cerr<<"To store: "<<i->content<<endl;
-    dr.d_ttd=i->ttl;
+    // cerr<<"To store: "<<i->content<<" with ttl/ttd "<<i->ttl<<endl;
+    dr.d_ttd=min(maxTTD, i->ttl);
     dr.d_string=DNSRR2String(*i);
     
     if(isNew) 
@@ -299,22 +309,34 @@ int MemRecursorCache::doWipeCache(const string& name, uint16_t qtype)
 bool MemRecursorCache::doAgeCache(time_t now, const string& name, uint16_t qtype, int32_t newTTL)
 {
   cache_t::iterator iter = d_cache.find(tie(name, qtype));
-  if(iter == d_cache.end()) 
+  uint32_t maxTTD=std::numeric_limits<uint32_t>::min();
+  if(iter == d_cache.end()) {
     return false;
+  }
 
-  int32_t ttl = iter->getTTD() - now;
-  if(ttl < 0) 
+  CacheEntry ce = *iter;
+
+  if(ce.d_records.size()==1) {
+    maxTTD=ce.d_records.begin()->d_ttd;
+  }
+  else { // find the LATEST ttd
+    for(vector<StoredRecord>::const_iterator i=ce.d_records.begin(); i != ce.d_records.end(); ++i)
+      maxTTD=max(maxTTD, i->d_ttd);
+  }
+
+  int32_t maxTTL = maxTTD - now;
+
+  if(maxTTL < 0)
     return false;  // would be dead anyhow
 
-  if(ttl > newTTL) {
+  if(maxTTL > newTTL) {
     d_cachecachevalid=false;
 
-    ttl = newTTL;
-    uint32_t newTTD = now + ttl;
+    uint32_t newTTD = now + newTTL;
     
-    CacheEntry ce = *iter;
     for(vector<StoredRecord>::iterator j = ce.d_records.begin() ; j != ce.d_records.end(); ++j)  {
-      j->d_ttd = newTTD;
+      if(j->d_ttd>newTTD) // do never renew expired or older TTLs
+        j->d_ttd = newTTD;
     }
     
     d_cache.replace(iter, ce);
